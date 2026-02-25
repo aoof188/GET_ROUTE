@@ -12,7 +12,13 @@
       "Bash(claude --teammate-mode:*)",
       "Bash(claude:*)",
       "Bash(ls:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(gh auth:*)",
+      "Bash(git config:*)",
+      "Bash(gh repo:*)",
+      "Bash(GIT_TRACE=1 git push:*)"
     ]
   }
 }

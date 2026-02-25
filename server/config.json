@@ -68,7 +68,6 @@
         "server": "dns-direct"
       },
       {
-        "_comment": "AI 服务 DNS — 走 Surfshark auto-best 出口解析",
         "domain_suffix": [
           "openai.com", "chatgpt.com", "ai.com", "oaiusercontent.com", "oaistatic.com",
           "anthropic.com", "claude.ai",
@@ -103,7 +102,6 @@
         "server": "dns-uk"
       },
       {
-        "_comment": "Google/YouTube/GitHub — HK 直出，DNS 走 HK",
         "rule_set": [
           "geosite-google",
           "geosite-youtube",
@@ -127,7 +125,7 @@
       "sniff_override_destination": false,
       "users": [
         {
-          "uuid": "<YOUR_UUID>"
+          "uuid": "2d17979e-f29b-458d-88d6-0bbd9b33c744"
         }
       ],
       "transport": {
@@ -144,7 +142,7 @@
       "sniff_override_destination": false,
       "users": [
         {
-          "uuid": "<YOUR_UUID>",
+          "uuid": "2d17979e-f29b-458d-88d6-0bbd9b33c744",
           "flow": "xtls-rprx-vision"
         }
       ],
@@ -157,9 +155,9 @@
             "server": "www.microsoft.com",
             "server_port": 443
           },
-          "private_key": "<REALITY_PRIVATE_KEY>",
+          "private_key": "cPFy72do-iUS-9M23YtuQJ5J5RwAUF1-JPfhHtAAZG8",
           "short_id": [
-            "<SHORT_ID>"
+            "41bda2c173654c0c"
           ]
         }
       }
@@ -173,7 +171,7 @@
       "sniff_override_destination": false,
       "users": [
         {
-          "password": "<HY2_PASSWORD>"
+          "password": "2112f9a3b21896ad30269e3ee0aad315"
         }
       ],
       "tls": {
@@ -202,37 +200,37 @@
     {
       "type": "wireguard",
       "tag": "wg-jp",
-      "server": "<SURFSHARK_JP_ENDPOINT>",
+      "server": "jp-tok.prod.surfshark.com",
       "server_port": 51820,
       "local_address": [
-        "<SURFSHARK_JP_ADDRESS>/32"
+        "10.14.0.2/32"
       ],
-      "private_key": "<SURFSHARK_WG_PRIVATE_KEY_JP>",
-      "peer_public_key": "<SURFSHARK_WG_PUBLIC_KEY_JP>",
+      "private_key": "IMbx/Icfz9a4rxNMRb08Zm3BxNpVf+Bj4/2zHOsMLGc=",
+      "peer_public_key": "YJSjrc/WWOjQUyUi4iYcHb7LsWWoCY+2fK8/8VtC/BY=",
       "mtu": 1280
     },
     {
       "type": "wireguard",
       "tag": "wg-sg",
-      "server": "<SURFSHARK_SG_ENDPOINT>",
+      "server": "sg-sng.prod.surfshark.com",
       "server_port": 51820,
       "local_address": [
-        "<SURFSHARK_SG_ADDRESS>/32"
+        "10.14.0.2/32"
       ],
-      "private_key": "<SURFSHARK_WG_PRIVATE_KEY_SG>",
-      "peer_public_key": "<SURFSHARK_WG_PUBLIC_KEY_SG>",
+      "private_key": "IMbx/Icfz9a4rxNMRb08Zm3BxNpVf+Bj4/2zHOsMLGc=",
+      "peer_public_key": "MGfgkhJsMVMTO33h1wr76+z6gQr/93VcGdClfbaPsnU=",
       "mtu": 1280
     },
     {
       "type": "wireguard",
       "tag": "wg-uk",
-      "server": "<SURFSHARK_UK_ENDPOINT>",
+      "server": "uk-lon.prod.surfshark.com",
       "server_port": 51820,
       "local_address": [
-        "<SURFSHARK_UK_ADDRESS>/32"
+        "10.14.0.2/32"
       ],
-      "private_key": "<SURFSHARK_WG_PRIVATE_KEY_UK>",
-      "peer_public_key": "<SURFSHARK_WG_PUBLIC_KEY_UK>",
+      "private_key": "IMbx/Icfz9a4rxNMRb08Zm3BxNpVf+Bj4/2zHOsMLGc=",
+      "peer_public_key": "iBJRXLZwXuWWrOZE1ZrAXEKMgV/z0WjG0Tks5rnWLBI=",
       "mtu": 1280
     },
 
@@ -269,7 +267,6 @@
         "outbound": "direct"
       },
       {
-        "_comment": "=== AI 服务 → Surfshark（封锁中国/HK IP）===",
         "domain_suffix": [
           "openai.com", "chatgpt.com", "ai.com", "oaiusercontent.com", "oaistatic.com",
           "anthropic.com", "claude.ai",
@@ -293,7 +290,6 @@
       },
 
       {
-        "_comment": "=== 流媒体 → Surfshark 解锁地区 ===",
         "rule_set": [
           "geosite-netflix",
           "geosite-disney",
@@ -307,7 +303,6 @@
       },
 
       {
-        "_comment": "=== 以下全部 HK 直出（不走 Surfshark，更快）===",
         "rule_set": [
           "geosite-google",
           "geosite-youtube",

@@ -98,17 +98,17 @@ proxies:
   # ---- HK ECS-A: VLESS Reality ----
   - name: "HK-A-Reality"
     type: vless
-    server: <ECS_A_IP>
+    server: 124.156.186.152
     port: 443
-    uuid: <YOUR_UUID>
+    uuid: 2d17979e-f29b-458d-88d6-0bbd9b33c744
     network: tcp
     tls: true
     udp: true
     flow: xtls-rprx-vision
     servername: www.microsoft.com
     reality-opts:
-      public-key: <REALITY_PUBLIC_KEY>
-      short-id: <SHORT_ID>
+      public-key: 4KFEdHv77Y58FCfTgr0JFmGjPCwJFlG4UdWzGnnJbgw
+      short-id: 41bda2c173654c0c
     client-fingerprint: chrome
 
   # ---- HK ECS-B: VLESS Reality ----
@@ -116,26 +116,26 @@ proxies:
     type: vless
     server: <ECS_B_IP>
     port: 443
-    uuid: <YOUR_UUID>
+    uuid: 2d17979e-f29b-458d-88d6-0bbd9b33c744
     network: tcp
     tls: true
     udp: true
     flow: xtls-rprx-vision
     servername: www.microsoft.com
     reality-opts:
-      public-key: <REALITY_PUBLIC_KEY>
-      short-id: <SHORT_ID>
+      public-key: 4KFEdHv77Y58FCfTgr0JFmGjPCwJFlG4UdWzGnnJbgw
+      short-id: 41bda2c173654c0c
     client-fingerprint: chrome
 
   # ---- HK ECS-A: Hysteria2 (备用) ----
   - name: "HK-A-Hy2"
     type: hysteria2
-    server: <ECS_A_IP>
+    server: 124.156.186.152
     port: 8443
-    password: <HY2_PASSWORD>
+    password: 2112f9a3b21896ad30269e3ee0aad315
     alpn:
       - h3
-    sni: <YOUR_DOMAIN>
+    sni: ka.aoof188.cn
     skip-cert-verify: false
 
   # ---- HK ECS-B: Hysteria2 (备用) ----
@@ -143,10 +143,10 @@ proxies:
     type: hysteria2
     server: <ECS_B_IP>
     port: 8443
-    password: <HY2_PASSWORD>
+    password: 2112f9a3b21896ad30269e3ee0aad315
     alpn:
       - h3
-    sni: <YOUR_DOMAIN>
+    sni: ka.aoof188.cn
     skip-cert-verify: false
 
 # ---------- 策略组 ----------

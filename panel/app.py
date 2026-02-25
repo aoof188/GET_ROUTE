@@ -9,6 +9,8 @@ import secrets
 import subprocess
 import time
 import shutil
+import asyncio
+import logging
 from uuid import uuid4
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -306,6 +308,95 @@ async def get_singbox_stats() -> dict:
         pass
 
     return stats
+
+
+# ================================================================
+#  Per-user Traffic Collection (background task)
+# ================================================================
+
+_traffic_logger = logging.getLogger("panel.traffic")
+_conn_tracker: dict = {}
+
+
+async def _collect_traffic():
+    """定期轮询 Clash API /connections，按用户归集流量写入数据库。"""
+    global _conn_tracker
+    await asyncio.sleep(10)
+
+    while True:
+        try:
+            headers = {}
+            if settings.SINGBOX_API_SECRET:
+                headers["Authorization"] = f"Bearer {settings.SINGBOX_API_SECRET}"
+
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.get(
+                    f"{settings.SINGBOX_API}/connections", headers=headers
+                )
+                if resp.status_code != 200:
+                    await asyncio.sleep(60)
+                    continue
+
+                data = resp.json()
+                connections = data.get("connections") or []
+
+            current_conns: dict = {}
+            user_deltas: dict[str, int] = {}
+
+            for conn in connections:
+                conn_id = conn.get("id", "")
+                upload = conn.get("upload", 0)
+                download = conn.get("download", 0)
+                total = upload + download
+
+                metadata = conn.get("metadata", {})
+                user_id = metadata.get("user", "")
+                if not user_id or not conn_id:
+                    continue
+
+                current_conns[conn_id] = {
+                    "upload": upload,
+                    "download": download,
+                    "user": user_id,
+                }
+
+                prev = _conn_tracker.get(conn_id)
+                if prev:
+                    delta = total - (prev["upload"] + prev["download"])
+                else:
+                    delta = total
+
+                if delta > 0:
+                    user_deltas[user_id] = user_deltas.get(user_id, 0) + delta
+
+            _conn_tracker = current_conns
+
+            if user_deltas:
+                db = SessionLocal()
+                try:
+                    for uid, delta in user_deltas.items():
+                        user = (
+                            db.query(User)
+                            .filter(
+                                (User.uuid == uid) | (User.hy2_password == uid)
+                            )
+                            .first()
+                        )
+                        if user:
+                            user.traffic_used = (user.traffic_used or 0) + delta
+                    db.commit()
+                except Exception as e:
+                    _traffic_logger.warning("Failed to update traffic: %s", e)
+                    db.rollback()
+                finally:
+                    db.close()
+
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            _traffic_logger.warning("Traffic collector error: %s", e)
+
+        await asyncio.sleep(60)
 
 
 async def check_tunnel_health() -> List[dict]:
@@ -714,8 +805,16 @@ async def lifespan(app: FastAPI):
     print(f"📦 数据库: {settings.DB_PATH}")
     print(f"⚙️  sing-box 配置: {settings.SINGBOX_CONFIG}")
 
+    collector = asyncio.create_task(_collect_traffic())
+
     yield
+
     # Shutdown
+    collector.cancel()
+    try:
+        await collector
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(title="sing-box Panel", lifespan=lifespan)
