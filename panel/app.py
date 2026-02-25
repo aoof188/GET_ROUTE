@@ -311,15 +311,21 @@ async def get_singbox_stats() -> dict:
 
 
 # ================================================================
-#  Per-user Traffic Collection (background task)
+#  Per-user & Per-outbound Traffic Collection (background task)
 # ================================================================
 
 _traffic_logger = logging.getLogger("panel.traffic")
 _conn_tracker: dict = {}
+_outbound_traffic: dict = {}
+
+
+def get_outbound_traffic() -> dict:
+    """返回各出口节点的累计流量（当前会话）。"""
+    return dict(_outbound_traffic)
 
 
 async def _collect_traffic():
-    """定期轮询 Clash API /connections，按用户归集流量写入数据库。"""
+    """定期轮询 Clash API /connections，按用户和出口节点归集流量。"""
     global _conn_tracker
     await asyncio.sleep(10)
 
@@ -347,27 +353,41 @@ async def _collect_traffic():
                 conn_id = conn.get("id", "")
                 upload = conn.get("upload", 0)
                 download = conn.get("download", 0)
-                total = upload + download
 
                 metadata = conn.get("metadata", {})
                 user_id = metadata.get("user", "")
-                if not user_id or not conn_id:
+
+                chains = conn.get("chains", [])
+                outbound = chains[-1] if chains else ""
+
+                if not conn_id:
                     continue
 
                 current_conns[conn_id] = {
                     "upload": upload,
                     "download": download,
                     "user": user_id,
+                    "outbound": outbound,
                 }
 
                 prev = _conn_tracker.get(conn_id)
                 if prev:
-                    delta = total - (prev["upload"] + prev["download"])
+                    up_delta = upload - prev["upload"]
+                    down_delta = download - prev["download"]
                 else:
-                    delta = total
+                    up_delta = upload
+                    down_delta = download
 
-                if delta > 0:
-                    user_deltas[user_id] = user_deltas.get(user_id, 0) + delta
+                total_delta = up_delta + down_delta
+
+                if total_delta > 0 and user_id:
+                    user_deltas[user_id] = user_deltas.get(user_id, 0) + total_delta
+
+                if (up_delta > 0 or down_delta > 0) and outbound:
+                    if outbound not in _outbound_traffic:
+                        _outbound_traffic[outbound] = {"upload": 0, "download": 0}
+                    _outbound_traffic[outbound]["upload"] += max(up_delta, 0)
+                    _outbound_traffic[outbound]["download"] += max(down_delta, 0)
 
             _conn_tracker = current_conns
 
@@ -881,6 +901,7 @@ async def dashboard(admin: str = Depends(verify_token), db: Session = Depends(ge
             "users_active": active,
             "singbox": stats,
             "tunnels": tunnels,
+            "outbound_traffic": get_outbound_traffic(),
         }
     }
 

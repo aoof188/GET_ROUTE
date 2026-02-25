@@ -252,6 +252,12 @@
                   <div class="progress-bar mt-2" x-show="t.delay">
                     <div class="progress-fill" :class="t.delay < 200 ? 'bg-emerald-500' : t.delay < 500 ? 'bg-amber-500' : 'bg-red-500'" :style="'width:' + Math.min(t.delay / 10, 100) + '%'"></div>
                   </div>
+                  <!-- Per-outbound traffic -->
+                  <div class="flex items-center gap-3 mt-3 pt-3 border-t border-white/[.04] text-[11px] text-gray-500" x-show="dash.outbound_traffic[t.tag]">
+                    <span class="flex items-center gap-1"><svg class="w-3 h-3 text-amber-400/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg><span x-text="formatBytes((dash.outbound_traffic[t.tag] || {}).upload || 0)"></span></span>
+                    <span class="flex items-center gap-1"><svg class="w-3 h-3 text-blue-400/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 13l-5 5m0 0l-5-5m5 5V6"/></svg><span x-text="formatBytes((dash.outbound_traffic[t.tag] || {}).download || 0)"></span></span>
+                    <span class="ml-auto font-mono text-gray-400" x-text="formatBytes(((dash.outbound_traffic[t.tag] || {}).upload || 0) + ((dash.outbound_traffic[t.tag] || {}).download || 0))"></span>
+                  </div>
                 </div>
               </template>
               <div x-show="dash.tunnels.length === 0" class="text-gray-600 text-xs col-span-full text-center py-10">
@@ -723,7 +729,7 @@
         { page: 'settings', label: '系统设置', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>' },
         { page: 'logs', label: '操作日志', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>' },
       ],
-      dash: { users_total: 0, users_active: 0, singbox: { running: false, connections: 0, upload_total: 0, download_total: 0, memory: 0 }, tunnels: [] },
+      dash: { users_total: 0, users_active: 0, singbox: { running: false, connections: 0, upload_total: 0, download_total: 0, memory: 0 }, tunnels: [], outbound_traffic: {} },
       users: [], userSearch: '',
       userModal: { show: false, editing: false, editId: null, saving: false, form: { username: '', note: '', traffic_limit_gb: 0, expire_days: 0 } },
       subModal: { show: false, tab: 'link', user: null, clashUrl: '', base64Url: '' },
