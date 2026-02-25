@@ -1,0 +1,337 @@
+# ============================================================
+#  Clash Meta (mihomo) 客户端配置
+#  架构: Client → HK ECS (A/B) → HK 直出 / Surfshark (JP/SG/UK)
+#
+#  分流策略（三层出口）:
+#  ┌─ 国内流量 ─────────────── DIRECT（客户端直连）
+#  ├─ AI 服务 ────────────────→ HK ECS → Surfshark（封锁 CN/HK IP）
+#  ├─ 流媒体 ────────────────→ HK ECS → Surfshark（地区解锁）
+#  ├─ Google/YouTube/GitHub ──→ HK ECS → HK 直出（不走 Surfshark，更快）
+#  └─ 其他外网 ──────────────→ HK ECS → HK 直出（默认）
+# ============================================================
+
+# ---------- 基础设置 ----------
+mixed-port: 7890
+redir-port: 7891
+tproxy-port: 7892
+allow-lan: true
+bind-address: "*"
+mode: rule
+log-level: info
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
+find-process-mode: strict
+global-client-fingerprint: chrome
+
+# ---------- 外部控制 ----------
+external-controller: 127.0.0.1:9090
+external-ui: ui
+secret: ""
+
+# ---------- GEO 数据 ----------
+geodata-mode: true
+geox-url:
+  geoip: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat"
+  geosite: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
+  mmdb: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country-lite.mmdb"
+geo-auto-update: true
+geo-update-interval: 72
+
+# ---------- DNS 配置 ----------
+dns:
+  enable: true
+  listen: 0.0.0.0:53
+  ipv6: false
+  prefer-h3: true
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - "*.lan"
+    - "*.local"
+    - "*.localhost"
+    - "dns.msftncsi.com"
+    - "www.msftncsi.com"
+    - "*.msftconnecttest.com"
+    - "+.stun.*.*"
+    - "+.stun.*.*.*"
+    - "localhost.ptlogin2.qq.com"
+    - "time.*.com"
+    - "time.*.gov"
+    - "time.*.edu.cn"
+    - "time.*.apple.com"
+    - "time-ios.apple.com"
+    - "time1.*.com"
+    - "time2.*.com"
+    - "time3.*.com"
+    - "time4.*.com"
+    - "time5.*.com"
+    - "time6.*.com"
+    - "time7.*.com"
+    - "ntp.*.com"
+    - "+.pool.ntp.org"
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  nameserver:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  nameserver-policy:
+    "geosite:cn,private":
+      - https://dns.alidns.com/dns-query
+      - https://doh.pub/dns-query
+    "geosite:geolocation-!cn":
+      - "https://dns.cloudflare.com/dns-query#proxy"
+      - "https://dns.google/dns-query#proxy"
+
+# ---------- TUN 模式 (透明代理) ----------
+tun:
+  enable: true
+  stack: system
+  dns-hijack:
+    - any:53
+  auto-route: true
+  auto-detect-interface: true
+
+# ---------- 代理节点 ----------
+proxies:
+  # ---- HK ECS-A: VLESS Reality ----
+  - name: "HK-A-Reality"
+    type: vless
+    server: <ECS_A_IP>
+    port: 443
+    uuid: <YOUR_UUID>
+    network: tcp
+    tls: true
+    udp: true
+    flow: xtls-rprx-vision
+    servername: www.microsoft.com
+    reality-opts:
+      public-key: <REALITY_PUBLIC_KEY>
+      short-id: <SHORT_ID>
+    client-fingerprint: chrome
+
+  # ---- HK ECS-B: VLESS Reality ----
+  - name: "HK-B-Reality"
+    type: vless
+    server: <ECS_B_IP>
+    port: 443
+    uuid: <YOUR_UUID>
+    network: tcp
+    tls: true
+    udp: true
+    flow: xtls-rprx-vision
+    servername: www.microsoft.com
+    reality-opts:
+      public-key: <REALITY_PUBLIC_KEY>
+      short-id: <SHORT_ID>
+    client-fingerprint: chrome
+
+  # ---- HK ECS-A: Hysteria2 (备用) ----
+  - name: "HK-A-Hy2"
+    type: hysteria2
+    server: <ECS_A_IP>
+    port: 8443
+    password: <HY2_PASSWORD>
+    alpn:
+      - h3
+    sni: <YOUR_DOMAIN>
+    skip-cert-verify: false
+
+  # ---- HK ECS-B: Hysteria2 (备用) ----
+  - name: "HK-B-Hy2"
+    type: hysteria2
+    server: <ECS_B_IP>
+    port: 8443
+    password: <HY2_PASSWORD>
+    alpn:
+      - h3
+    sni: <YOUR_DOMAIN>
+    skip-cert-verify: false
+
+# ---------- 策略组 ----------
+proxy-groups:
+  # ---- 入口选择 (HA 核心) ----
+  - name: "入口选择"
+    type: fallback
+    proxies:
+      - "HK-A-Reality"
+      - "HK-B-Reality"
+      - "HK-A-Hy2"
+      - "HK-B-Hy2"
+    url: "https://www.gstatic.com/generate_204"
+    interval: 180
+    lazy: false
+
+  # ---- 延迟优选 ----
+  - name: "自动选择"
+    type: url-test
+    proxies:
+      - "HK-A-Reality"
+      - "HK-B-Reality"
+      - "HK-A-Hy2"
+      - "HK-B-Hy2"
+    url: "https://www.gstatic.com/generate_204"
+    interval: 300
+    tolerance: 50
+    lazy: false
+
+  # ---- 手动切换 ----
+  - name: "手动选择"
+    type: select
+    proxies:
+      - "入口选择"
+      - "自动选择"
+      - "HK-A-Reality"
+      - "HK-B-Reality"
+      - "HK-A-Hy2"
+      - "HK-B-Hy2"
+
+  # ---- 功能分组 (全部走代理，出口由服务端分流) ----
+  - name: "proxy"
+    type: select
+    proxies:
+      - "入口选择"
+      - "自动选择"
+      - "手动选择"
+
+  # ---- 流媒体 (走代理，服务端决定出口国家) ----
+  - name: "Streaming"
+    type: select
+    proxies:
+      - "proxy"
+      - "入口选择"
+      - "自动选择"
+
+  # ---- AI 服务 (服务端 → Surfshark 出口) ----
+  - name: "AI"
+    type: select
+    proxies:
+      - "proxy"
+      - "入口选择"
+      - "自动选择"
+
+  # ---- 国外常用 (服务端 → HK 直出，更快) ----
+  - name: "Global"
+    type: select
+    proxies:
+      - "proxy"
+      - "入口选择"
+      - "自动选择"
+      - "DIRECT"
+
+  # ---- 兜底 (服务端 → HK 直出) ----
+  - name: "Final"
+    type: select
+    proxies:
+      - "proxy"
+      - "DIRECT"
+
+# ---------- 分流规则 ----------
+rules:
+  # ---- 本地 & 局域网 ----
+  - DOMAIN-SUFFIX,local,DIRECT
+  - DOMAIN-SUFFIX,localhost,DIRECT
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - IP-CIDR,100.64.0.0/10,DIRECT,no-resolve
+
+  # ---- 广告拦截 ----
+  - GEOSITE,category-ads-all,REJECT
+
+  # ---- AI 服务 (封锁中国/HK IP → 服务端走 Surfshark) ----
+  # -- OpenAI / ChatGPT --
+  - DOMAIN-SUFFIX,openai.com,AI
+  - DOMAIN-SUFFIX,chatgpt.com,AI
+  - DOMAIN-SUFFIX,ai.com,AI
+  - DOMAIN-SUFFIX,oaiusercontent.com,AI
+  - DOMAIN-SUFFIX,oaistatic.com,AI
+  # -- Anthropic / Claude --
+  - DOMAIN-SUFFIX,anthropic.com,AI
+  - DOMAIN-SUFFIX,claude.ai,AI
+  # -- Google AI (Gemini / NotebookLM / DeepMind) --
+  - DOMAIN-SUFFIX,gemini.google.com,AI
+  - DOMAIN-SUFFIX,bard.google.com,AI
+  - DOMAIN-SUFFIX,aistudio.google.com,AI
+  - DOMAIN-SUFFIX,makersuite.google.com,AI
+  - DOMAIN-SUFFIX,ai.google.dev,AI
+  - DOMAIN-SUFFIX,deepmind.google,AI
+  - DOMAIN-SUFFIX,notebooklm.google.com,AI
+  - DOMAIN-SUFFIX,notebooklm.google,AI
+  - DOMAIN-SUFFIX,generativelanguage.googleapis.com,AI
+  - DOMAIN-SUFFIX,deepmind.com,AI
+  # -- xAI / Grok --
+  - DOMAIN-SUFFIX,x.ai,AI
+  - DOMAIN-SUFFIX,grok.com,AI
+  # -- Microsoft Copilot --
+  - DOMAIN-SUFFIX,copilot.microsoft.com,AI
+  # -- Mistral --
+  - DOMAIN-SUFFIX,mistral.ai,AI
+  # -- Perplexity --
+  - DOMAIN-SUFFIX,perplexity.ai,AI
+  # -- Meta AI --
+  - DOMAIN-SUFFIX,meta.ai,AI
+  # -- Midjourney / 图像生成 --
+  - DOMAIN-SUFFIX,midjourney.com,AI
+  - DOMAIN-SUFFIX,pika.art,AI
+  - DOMAIN-SUFFIX,runway.com,AI
+  - DOMAIN-SUFFIX,runwayml.com,AI
+  - DOMAIN-SUFFIX,luma.ai,AI
+  - DOMAIN-SUFFIX,stability.ai,AI
+  # -- 聊天 / 聚合 --
+  - DOMAIN-SUFFIX,character.ai,AI
+  - DOMAIN-SUFFIX,poe.com,AI
+  # -- 音乐 / 音频 AI --
+  - DOMAIN-SUFFIX,suno.ai,AI
+  - DOMAIN-SUFFIX,suno.com,AI
+  - DOMAIN-SUFFIX,elevenlabs.io,AI
+  # -- 开发 / 编程 AI --
+  - DOMAIN-SUFFIX,cursor.sh,AI
+  - DOMAIN-SUFFIX,cursor.com,AI
+  - DOMAIN-SUFFIX,v0.dev,AI
+  - DOMAIN-SUFFIX,bolt.new,AI
+  - DOMAIN-SUFFIX,huggingface.co,AI
+  - DOMAIN-SUFFIX,replicate.com,AI
+  # -- 推理 API 平台 --
+  - DOMAIN-SUFFIX,together.ai,AI
+  - DOMAIN-SUFFIX,groq.com,AI
+  - DOMAIN-SUFFIX,fireworks.ai,AI
+  - DOMAIN-SUFFIX,anyscale.com,AI
+  - DOMAIN-SUFFIX,cohere.com,AI
+  - DOMAIN-SUFFIX,cohere.ai,AI
+  # -- 其他 AI --
+  - DOMAIN-SUFFIX,dify.ai,AI
+  - DOMAIN-SUFFIX,flowith.io,AI
+
+  # ---- 流媒体 (服务端 → Surfshark 地区解锁) ----
+  - GEOSITE,netflix,Streaming
+  - GEOSITE,disney,Streaming
+  - GEOSITE,hbo,Streaming
+  - GEOSITE,bbc,Streaming
+  - GEOSITE,spotify,Streaming
+  - GEOSITE,primevideo,Streaming
+
+  # ---- 国外常用 (服务端 → HK 直出，更快) ----
+  - GEOSITE,youtube,Global
+  - GEOSITE,google,Global
+  - GEOSITE,github,Global
+  - GEOSITE,twitter,Global
+  - GEOSITE,facebook,Global
+  - GEOSITE,instagram,Global
+  - GEOSITE,telegram,Global
+  - GEOSITE,whatsapp,Global
+  - GEOSITE,wikipedia,Global
+  - GEOSITE,reddit,Global
+  - GEOSITE,steam,Global
+  - GEOSITE,apple-cn,DIRECT
+  - GEOSITE,microsoft@cn,DIRECT
+
+  # ---- 国内直连 ----
+  - GEOSITE,cn,DIRECT
+  - GEOIP,cn,DIRECT,no-resolve
+  - GEOIP,private,DIRECT,no-resolve
+
+  # ---- 兜底 ----
+  - MATCH,Final

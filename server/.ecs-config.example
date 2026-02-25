@@ -1,0 +1,24 @@
+# ECS 配置（复制到 .ecs-config 并修改）
+# 注意: ECS-A 是主节点，ECS-B 是从节点
+# - ECS-A: ./ecs-sync.sh push  (推送到 ECS-B)
+# - ECS-B: ./ecs-sync.sh pull  (从 ECS-A 拉取)
+
+# 本机信息
+LOCAL_NAME="ECS-A"       # ECS-A 或 ECS-B
+LOCAL_IP=""              # 本机IP（自动检测）
+
+# 对方 ECS 信息
+REMOTE_NAME="ECS-B"      # ECS-A 填 ECS-B，ECS-B 填 ECS-A
+REMOTE_IP="<对方IP>"     # 必须填写对方 ECS 的公网 IP
+
+# SSH 配置
+SSH_KEY="/root/.ssh/id_rsa"
+SSH_USER="root"
+SSH_PORT="22"
+
+# Git 仓库（可选，用于配置中心化存储）
+# GIT_REPO="git@github.com:yourusername/get-route-config.git"
+# GIT_BRANCH="main"
+
+# 同步开关
+ENABLE_SYNC="true"
