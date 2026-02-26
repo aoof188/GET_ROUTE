@@ -99,7 +99,7 @@ proxies:
   - name: "HK-A-Reality"
     type: vless
     server: 124.156.186.152
-    port: 443
+    port: 40443
     uuid: 2d17979e-f29b-458d-88d6-0bbd9b33c744
     network: tcp
     tls: true
@@ -115,7 +115,7 @@ proxies:
   - name: "HK-B-Reality"
     type: vless
     server: <ECS_B_IP>
-    port: 443
+    port: 40443
     uuid: 2d17979e-f29b-458d-88d6-0bbd9b33c744
     network: tcp
     tls: true

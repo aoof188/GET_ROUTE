@@ -270,6 +270,8 @@ Description=sing-box service
 Documentation=https://sing-box.sagernet.org
 After=network.target nss-lookup.target
 Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -283,9 +285,6 @@ LimitNOFILE=1048576
 # ---- 自动重启策略 ----
 Restart=always
 RestartSec=5s
-# 60 秒内最多重启 5 次，超过后进入 failed 状态（由 watchdog 接管二次拉起）
-StartLimitIntervalSec=60
-StartLimitBurst=5
 
 # ---- OOM 保护 (不要被 OOM Killer 杀掉) ----
 OOMScoreAdjust=-500

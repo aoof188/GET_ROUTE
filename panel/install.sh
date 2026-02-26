@@ -88,8 +88,38 @@ generate_env() {
     ADMIN_PASS=$(head -c 12 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 16)
     JWT_SECRET=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 64)
 
+    # 尝试从 sing-box credentials.env 自动读取凭据
+    local CRED_FILE="/etc/sing-box/credentials.env"
+    local AUTO_REALITY_PUB="" AUTO_REALITY_SID="" AUTO_HY2_PASS=""
+    if [ -f "$CRED_FILE" ]; then
+        AUTO_REALITY_PUB=$(grep -oP 'REALITY_PUBLIC_KEY=\K.*' "$CRED_FILE" 2>/dev/null || true)
+        AUTO_REALITY_SID=$(grep -oP 'SHORT_ID=\K.*' "$CRED_FILE" 2>/dev/null || true)
+        AUTO_HY2_PASS=$(grep -oP 'HY2_PASSWORD=\K.*' "$CRED_FILE" 2>/dev/null || true)
+        [ -n "$AUTO_REALITY_PUB" ] && info "从 credentials.env 读取到 Reality 公钥"
+    fi
+
+    # 交互式填写关键配置
+    echo ""
+    info "请填写节点信息（用于订阅生成，留空可稍后编辑 .env）"
+    echo ""
+    read -p "ECS-A 公网 IP: " -r INPUT_ECS_A_IP
+    read -p "ECS-B 公网 IP（没有留空）: " -r INPUT_ECS_B_IP
+    read -p "代理域名（如 proxy.example.com）: " -r INPUT_PROXY_DOMAIN
+    read -p "面板域名（如 panel.example.com）: " -r INPUT_PANEL_DOMAIN
+
+    if [ -z "$AUTO_REALITY_PUB" ]; then
+        read -p "Reality 公钥: " -r AUTO_REALITY_PUB
+    fi
+    if [ -z "$AUTO_REALITY_SID" ]; then
+        read -p "Reality Short ID: " -r AUTO_REALITY_SID
+    fi
+
+    local INPUT_HY2_SNI="${INPUT_PROXY_DOMAIN}"
+    local INPUT_SUB_BASE_URL=""
+    [ -n "$INPUT_PANEL_DOMAIN" ] && INPUT_SUB_BASE_URL="https://${INPUT_PANEL_DOMAIN}"
+
     cat > "$ENV_FILE" <<EOF
-# sing-box Panel 配置
+# sing-box Panel 配置 (auto-generated)
 # 生成时间: $(date '+%Y-%m-%d %H:%M:%S')
 
 # ---- 面板 ----
@@ -108,20 +138,22 @@ SINGBOX_API_SECRET=
 DB_PATH=${DATA_DIR}/panel.db
 
 # ---- 节点信息（用于订阅生成）----
-ECS_A_IP=
+ECS_A_IP=${INPUT_ECS_A_IP}
 ECS_A_NAME=HK-A
-ECS_B_IP=
+ECS_B_IP=${INPUT_ECS_B_IP}
 ECS_B_NAME=HK-B
 VLESS_PORT=443
 HY2_PORT=8443
-REALITY_PUBLIC_KEY=
-REALITY_SHORT_ID=
+REALITY_PUBLIC_KEY=${AUTO_REALITY_PUB}
+REALITY_SHORT_ID=${AUTO_REALITY_SID}
 REALITY_SNI=www.microsoft.com
-HY2_SNI=
+REALITY_PORT=40443
+HY2_SNI=${INPUT_HY2_SNI}
+PROXY_DOMAIN=${INPUT_PROXY_DOMAIN}
+PANEL_DOMAIN=${INPUT_PANEL_DOMAIN}
 
 # ---- 订阅 ----
-# 面板对外可访问的 URL，用于生成订阅链接
-SUB_BASE_URL=
+SUB_BASE_URL=${INPUT_SUB_BASE_URL}
 EOF
 
     chmod 600 "$ENV_FILE"
@@ -132,7 +164,8 @@ EOF
     info "  密码:   ${ADMIN_PASS}"
     info "========================================="
     info "配置文件: ${ENV_FILE}"
-    warn "请编辑 .env 文件，填写 ECS IP、Reality 密钥等信息"
+    [ -z "$AUTO_REALITY_PUB" ] && warn "REALITY_PUBLIC_KEY 未填写，请稍后编辑 .env"
+    [ -z "$INPUT_ECS_A_IP" ] && warn "ECS_A_IP 未填写，请稍后编辑 .env"
 }
 
 # ---------- systemd 服务 ----------
