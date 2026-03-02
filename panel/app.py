@@ -426,7 +426,7 @@ async def check_tunnel_health() -> List[dict]:
         headers["Authorization"] = f"Bearer {settings.SINGBOX_API_SECRET}"
 
     tunnels = []
-    tunnel_tags = ["wg-jp", "wg-sg", "wg-uk", "auto-best", "direct"]
+    tunnel_tags = ["wg-jp", "wg-sg", "wg-uk", "wg-us", "auto-best", "direct"]
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -1006,7 +1006,7 @@ async def get_metrics(request: Request):
     metrics_lines.append("")
 
     # 隧道延迟（从 sing-box API）
-    tunnel_tags = ["wg-jp", "wg-sg", "wg-uk", "auto-best", "direct"]
+    tunnel_tags = ["wg-jp", "wg-sg", "wg-uk", "wg-us", "auto-best", "direct"]
     for tag in tunnel_tags:
         try:
             async with httpx.AsyncClient(timeout=3) as client:
