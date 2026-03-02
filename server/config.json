@@ -39,6 +39,11 @@
         "detour": "wg-uk"
       },
       {
+        "tag": "dns-us",
+        "address": "https://1.1.1.1/dns-query",
+        "detour": "wg-us"
+      },
+      {
         "tag": "dns-hk",
         "address": "https://1.1.1.1/dns-query",
         "detour": "direct"
@@ -71,10 +76,6 @@
         "domain_suffix": [
           "openai.com", "chatgpt.com", "ai.com", "oaiusercontent.com", "oaistatic.com",
           "anthropic.com", "claude.ai",
-          "gemini.google.com", "bard.google.com", "aistudio.google.com",
-          "makersuite.google.com", "ai.google.dev", "deepmind.google",
-          "notebooklm.google.com", "notebooklm.google",
-          "generativelanguage.googleapis.com",
           "x.ai", "grok.com",
           "perplexity.ai", "midjourney.com", "character.ai",
           "poe.com", "suno.ai", "suno.com", "meta.ai",
@@ -88,6 +89,15 @@
           "copilot.microsoft.com"
         ],
         "server": "dns-auto"
+      },
+      {
+        "domain_suffix": [
+          "gemini.google.com", "bard.google.com", "aistudio.google.com",
+          "makersuite.google.com", "ai.google.dev", "deepmind.google",
+          "notebooklm.google.com", "notebooklm.google",
+          "generativelanguage.googleapis.com"
+        ],
+        "server": "dns-us"
       },
       {
         "rule_set": [
@@ -233,11 +243,23 @@
       "peer_public_key": "iBJRXLZwXuWWrOZE1ZrAXEKMgV/z0WjG0Tks5rnWLBI=",
       "mtu": 1280
     },
+    {
+      "type": "wireguard",
+      "tag": "wg-us",
+      "server": "us-lax.prod.surfshark.com",
+      "server_port": 51820,
+      "local_address": [
+        "10.14.0.2/32"
+      ],
+      "private_key": "IMbx/Icfz9a4rxNMRb08Zm3BxNpVf+Bj4/2zHOsMLGc=",
+      "peer_public_key": "m+L7BVQWDwU2TxjfspMRLkRctvmo7fOkd+eVk6KC5lM=",
+      "mtu": 1280
+    },
 
     {
       "type": "urltest",
       "tag": "auto-best",
-      "outbounds": ["wg-jp", "wg-sg", "wg-uk"],
+      "outbounds": ["wg-jp", "wg-sg", "wg-uk", "wg-us"],
       "url": "https://www.gstatic.com/generate_204",
       "interval": "5m",
       "tolerance": 100
@@ -270,10 +292,6 @@
         "domain_suffix": [
           "openai.com", "chatgpt.com", "ai.com", "oaiusercontent.com", "oaistatic.com",
           "anthropic.com", "claude.ai",
-          "gemini.google.com", "bard.google.com", "aistudio.google.com",
-          "makersuite.google.com", "ai.google.dev", "deepmind.google",
-          "notebooklm.google.com", "notebooklm.google",
-          "generativelanguage.googleapis.com",
           "x.ai", "grok.com",
           "perplexity.ai", "midjourney.com", "character.ai",
           "poe.com", "suno.ai", "suno.com", "meta.ai",
@@ -287,6 +305,16 @@
           "copilot.microsoft.com"
         ],
         "outbound": "auto-best"
+      },
+
+      {
+        "domain_suffix": [
+          "gemini.google.com", "bard.google.com", "aistudio.google.com",
+          "makersuite.google.com", "ai.google.dev", "deepmind.google",
+          "notebooklm.google.com", "notebooklm.google",
+          "generativelanguage.googleapis.com"
+        ],
+        "outbound": "wg-us"
       },
 
       {
