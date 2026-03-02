@@ -797,10 +797,10 @@ async def add_security_headers(request: Request, call_next):
     # Content-Security-Policy: 限制资源加载来源
     csp = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://fastly.jsdelivr.net https://cdnjs.cloudflare.com https://lf26-cdn-tos.bytecdntp.com; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.googleapis.cn https://cdnjs.cloudflare.com; "
         "img-src 'self' data: https:; "
-        "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
+        "font-src 'self' https://fonts.gstatic.com https://fonts.gstatic.cn https://cdnjs.cloudflare.com; "
         "connect-src 'self' https:; "
         "frame-ancestors 'self';"
     )
