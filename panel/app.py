@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Depends, HTTPException, Request, Query, Header
 from fastapi.responses import HTMLResponse, PlainTextResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator
@@ -797,10 +798,10 @@ async def add_security_headers(request: Request, call_next):
     # Content-Security-Policy: 限制资源加载来源
     csp = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://fastly.jsdelivr.net https://cdnjs.cloudflare.com https://lf26-cdn-tos.bytecdntp.com; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.googleapis.cn https://cdnjs.cloudflare.com; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: https:; "
-        "font-src 'self' https://fonts.gstatic.com https://fonts.gstatic.cn https://cdnjs.cloudflare.com; "
+        "font-src 'self' data:; "
         "connect-src 'self' https:; "
         "frame-ancestors 'self';"
     )
@@ -850,6 +851,10 @@ app.add_middleware(
 app.middleware("http")(add_security_headers)
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+_static_dir = Path(__file__).parent / "static"
+if _static_dir.is_dir():
+    app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
 
 # ---- 页面路由 ----
