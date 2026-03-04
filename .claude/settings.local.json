@@ -18,7 +18,9 @@
       "Bash(gh auth:*)",
       "Bash(git config:*)",
       "Bash(gh repo:*)",
-      "Bash(GIT_TRACE=1 git push:*)"
+      "Bash(GIT_TRACE=1 git push:*)",
+      "Bash(git add:*)",
+      "Bash(cd:*)"
     ]
   }
 }

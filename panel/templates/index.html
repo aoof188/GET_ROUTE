@@ -265,6 +265,58 @@
             </div>
           </div>
 
+          <!-- Traffic Trend (7-day bar chart) -->
+          <div class="glass rounded-2xl p-5 mb-6 gradient-border" x-show="Object.keys(dash.trafficDaily || {}).length > 0">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-sm font-semibold text-gray-300">近 7 天流量趋势</h3>
+              <span class="text-[11px] text-gray-600">按出口节点</span>
+            </div>
+            <div class="space-y-2">
+              <template x-for="day in trafficDays" :key="day">
+                <div class="flex items-center gap-3 text-xs">
+                  <span class="w-12 text-gray-500 font-mono text-[11px] flex-shrink-0" x-text="day.slice(5)"></span>
+                  <div class="flex-1 flex items-center gap-1 h-5">
+                    <template x-for="(ob, idx) in trafficOutbounds" :key="ob">
+                      <div class="h-full rounded-sm transition-all"
+                           :style="'width:' + trafficBarWidth(day, ob) + '%; background:' + trafficColor(idx)"
+                           :title="ob + ': ' + formatBytes(((dash.trafficDaily||{})[day]||{})[ob]?.upload + ((dash.trafficDaily||{})[day]||{})[ob]?.download || 0)">
+                      </div>
+                    </template>
+                  </div>
+                  <span class="w-16 text-right text-gray-500 font-mono text-[11px] flex-shrink-0" x-text="formatBytes(trafficDayTotal(day))"></span>
+                </div>
+              </template>
+            </div>
+            <div class="flex flex-wrap gap-3 mt-3 pt-3 border-t border-white/[.04]">
+              <template x-for="(ob, idx) in trafficOutbounds" :key="ob">
+                <span class="flex items-center gap-1.5 text-[11px] text-gray-500">
+                  <span class="w-2.5 h-2.5 rounded-sm" :style="'background:' + trafficColor(idx)"></span>
+                  <span x-text="ob"></span>
+                </span>
+              </template>
+            </div>
+          </div>
+
+          <!-- User Traffic Ranking -->
+          <div class="glass rounded-2xl p-5 mb-6 gradient-border" x-show="(dash.trafficUsers || []).length > 0">
+            <h3 class="text-sm font-semibold mb-4 text-gray-300">用户流量排行（30天）</h3>
+            <div class="space-y-2">
+              <template x-for="(tu, idx) in (dash.trafficUsers || []).slice(0, 10)" :key="tu.user_id">
+                <div class="flex items-center gap-3 bg-white/[.02] rounded-xl px-4 py-2.5 border border-white/[.04] hover:border-white/[.08]">
+                  <span class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                        :class="idx < 3 ? 'bg-primary-500/20 text-primary-400' : 'bg-white/[.04] text-gray-600'"
+                        x-text="idx + 1"></span>
+                  <span class="text-xs font-medium text-gray-300 flex-1 truncate" x-text="tu.username"></span>
+                  <div class="flex items-center gap-3 text-[11px] text-gray-500 flex-shrink-0">
+                    <span class="flex items-center gap-1"><svg class="w-3 h-3 text-amber-400/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg><span x-text="formatBytes(tu.upload)"></span></span>
+                    <span class="flex items-center gap-1"><svg class="w-3 h-3 text-blue-400/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 13l-5 5m0 0l-5-5m5 5V6"/></svg><span x-text="formatBytes(tu.download)"></span></span>
+                    <span class="font-mono text-gray-400 w-16 text-right" x-text="formatBytes(tu.total)"></span>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+
           <!-- Quick Actions -->
           <div class="glass rounded-2xl p-5 gradient-border">
             <h3 class="text-sm font-semibold mb-4 text-gray-300">快速操作</h3>
@@ -346,6 +398,7 @@
                       <td class="px-5 py-3.5 text-gray-600 max-w-[100px] truncate" x-text="u.note || '—'"></td>
                       <td class="px-5 py-3.5">
                         <div class="flex items-center justify-end gap-0.5">
+                          <button @click="showUserTraffic(u)" class="p-1.5 rounded-lg hover:bg-emerald-500/10 text-gray-600 hover:text-emerald-400" title="流量详情"><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg></button>
                           <button @click="showSubscription(u)" class="p-1.5 rounded-lg hover:bg-blue-500/10 text-gray-600 hover:text-blue-400" title="订阅"><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg></button>
                           <button @click="toggleUser(u)" class="p-1.5 rounded-lg" :class="u.enabled ? 'hover:bg-amber-500/10 text-emerald-500 hover:text-amber-400' : 'hover:bg-emerald-500/10 text-gray-600 hover:text-emerald-400'" :title="u.enabled ? '禁用' : '启用'"><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg></button>
                           <button @click="openEditUser(u)" class="p-1.5 rounded-lg hover:bg-primary-500/10 text-gray-600 hover:text-primary-400" title="编辑"><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
@@ -692,6 +745,62 @@
     </div>
   </div>
 
+  <!-- ==================== USER TRAFFIC MODAL ==================== -->
+  <div x-show="trafficModal.show" class="fixed inset-0 z-50 flex items-center justify-center p-4" x-cloak>
+    <div class="fixed inset-0 bg-black/70 backdrop-blur-sm" @click="trafficModal.show = false" style="animation: fadeIn .2s ease-out"></div>
+    <div class="glass-strong rounded-2xl shadow-2xl w-full max-w-lg relative z-10 gradient-border animate-slide-up max-h-[85vh] flex flex-col">
+      <div class="px-6 py-5 border-b border-white/[.06] flex-shrink-0">
+        <h3 class="text-sm font-bold">流量详情 · <span class="text-primary-400" x-text="trafficModal.data?.username"></span></h3>
+        <div class="flex items-center gap-3 mt-2 text-[11px] text-gray-500">
+          <span>已用: <span class="text-gray-300 font-medium" x-text="formatBytes(trafficModal.data?.traffic_used || 0)"></span></span>
+          <span>限额: <span class="text-gray-300 font-medium" x-text="trafficModal.data?.traffic_limit > 0 ? formatBytes(trafficModal.data?.traffic_limit) : '无限'"></span></span>
+        </div>
+      </div>
+      <div class="px-6 py-5 overflow-y-auto flex-1 min-h-0 space-y-5">
+        <!-- By outbound -->
+        <div x-show="Object.keys(trafficModal.data?.by_outbound || {}).length > 0">
+          <h4 class="text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wider">按出口节点</h4>
+          <div class="space-y-2">
+            <template x-for="ob in Object.keys(trafficModal.data?.by_outbound || {}).sort()" :key="ob">
+              <div class="flex items-center justify-between bg-white/[.02] rounded-xl px-4 py-2.5 border border-white/[.04]">
+                <span class="text-xs font-medium text-gray-300" x-text="ob"></span>
+                <div class="flex items-center gap-3 text-[11px] text-gray-500">
+                  <span class="flex items-center gap-1"><svg class="w-3 h-3 text-amber-400/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg><span x-text="formatBytes(trafficModal.data.by_outbound[ob]?.upload || 0)"></span></span>
+                  <span class="flex items-center gap-1"><svg class="w-3 h-3 text-blue-400/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 13l-5 5m0 0l-5-5m5 5V6"/></svg><span x-text="formatBytes(trafficModal.data.by_outbound[ob]?.download || 0)"></span></span>
+                  <span class="font-mono text-gray-400" x-text="formatBytes((trafficModal.data.by_outbound[ob]?.upload || 0) + (trafficModal.data.by_outbound[ob]?.download || 0))"></span>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+        <!-- Daily -->
+        <div x-show="Object.keys(trafficModal.data?.daily || {}).length > 0">
+          <h4 class="text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wider">每日流量</h4>
+          <div class="space-y-1">
+            <template x-for="day in Object.keys(trafficModal.data?.daily || {}).sort().reverse().slice(0, 14)" :key="day">
+              <div class="flex items-center gap-3 text-xs">
+                <span class="w-20 text-gray-500 font-mono text-[11px] flex-shrink-0" x-text="day"></span>
+                <div class="flex-1 h-4 rounded-sm bg-white/[.02] overflow-hidden">
+                  <div class="h-full bg-gradient-to-r from-primary-500/40 to-violet-500/40 rounded-sm"
+                       :style="'width:' + Math.min(((trafficModal.data.daily[day]?.upload||0)+(trafficModal.data.daily[day]?.download||0)) / trafficModal.maxDaily * 100, 100) + '%'">
+                  </div>
+                </div>
+                <span class="w-16 text-right text-gray-500 font-mono text-[11px] flex-shrink-0" x-text="formatBytes((trafficModal.data.daily[day]?.upload||0)+(trafficModal.data.daily[day]?.download||0))"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+        <div x-show="Object.keys(trafficModal.data?.daily || {}).length === 0 && Object.keys(trafficModal.data?.by_outbound || {}).length === 0" class="text-center py-10">
+          <svg class="w-8 h-8 mx-auto mb-2 text-gray-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          <p class="text-gray-600 text-xs">暂无流量数据</p>
+        </div>
+      </div>
+      <div class="px-6 py-4 border-t border-white/[.06] flex justify-end flex-shrink-0">
+        <button @click="trafficModal.show = false" class="px-4 py-2 rounded-xl text-xs font-medium bg-white/[.04] hover:bg-white/[.08] text-gray-400 border border-white/[.04] active:scale-[.97]">关闭</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ==================== TOAST ==================== -->
   <div class="fixed bottom-5 right-5 z-[60] space-y-2 pointer-events-none">
     <template x-for="(t, i) in toasts" :key="i">
@@ -727,10 +836,11 @@
         { page: 'settings', label: '系统设置', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>' },
         { page: 'logs', label: '操作日志', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>' },
       ],
-      dash: { users_total: 0, users_active: 0, singbox: { running: false, connections: 0, upload_total: 0, download_total: 0, memory: 0 }, tunnels: [], outbound_traffic: {} },
+      dash: { users_total: 0, users_active: 0, singbox: { running: false, connections: 0, upload_total: 0, download_total: 0, memory: 0 }, tunnels: [], outbound_traffic: {}, trafficDaily: {}, trafficUsers: [] },
       users: [], userSearch: '',
       userModal: { show: false, editing: false, editId: null, saving: false, form: { username: '', note: '', traffic_limit_gb: 0, expire_days: 0 } },
       subModal: { show: false, tab: 'link', user: null, clashUrl: '', base64Url: '' },
+      trafficModal: { show: false, data: null, maxDaily: 1 },
       nodes: [], nodesLoading: false,
       settingsForm: {},
       logs: [],
@@ -753,7 +863,20 @@
           case 'settings': await this.fetchSettings(); break; case 'logs': await this.fetchLogs(); break;
         }
       },
-      async fetchDashboard() { try { const r = await this.api('GET', '/api/dashboard'); if (r.ok) this.dash = r.data; } catch(e){} },
+      async fetchDashboard() {
+        try {
+          const [r, td, tu] = await Promise.all([
+            this.api('GET', '/api/dashboard'),
+            this.api('GET', '/api/traffic/daily?days=7').catch(() => null),
+            this.api('GET', '/api/traffic/users?days=30').catch(() => null),
+          ]);
+          if (r.ok) {
+            this.dash = r.data;
+            this.dash.trafficDaily = td?.ok ? td.data : {};
+            this.dash.trafficUsers = tu?.ok ? tu.data : [];
+          }
+        } catch(e){}
+      },
       async fetchUsers() { try { const qs = this.userSearch ? `?search=${encodeURIComponent(this.userSearch)}` : ''; const r = await this.api('GET', `/api/users${qs}`); if (r.ok) this.users = r.data; } catch(e){} },
       async fetchNodes() { try { const r = await this.api('GET', '/api/nodes'); if (r.ok) this.nodes = r.data; } catch(e){} },
       async fetchSettings() { try { const r = await this.api('GET', '/api/settings'); if (r.ok) this.settingsForm = r.data; } catch(e){} },
@@ -841,6 +964,52 @@
       async copyText(text) { if (!text) return; try { await navigator.clipboard.writeText(text); this.toast('已复制', 'success'); } catch { this.toast('复制失败', 'error'); } },
       formatBytes(bytes) { if (!bytes || bytes === 0) return '0 B'; const k = 1024; const s = ['B', 'KB', 'MB', 'GB', 'TB']; const i = Math.floor(Math.log(bytes) / Math.log(k)); return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + s[i]; },
       formatDate(d) { if (!d) return '—'; const dt = new Date(d); return dt.toLocaleDateString('zh-CN') + ' ' + dt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }); },
+
+      // ---- Traffic trend helpers ----
+      get trafficDays() { return Object.keys(this.dash.trafficDaily || {}).sort(); },
+      get trafficOutbounds() {
+        const obs = new Set();
+        for (const day of Object.values(this.dash.trafficDaily || {})) {
+          for (const ob of Object.keys(day)) obs.add(ob);
+        }
+        return [...obs].sort((a, b) => a.startsWith('wg-') === b.startsWith('wg-') ? a.localeCompare(b) : a.startsWith('wg-') ? -1 : 1);
+      },
+      trafficDayTotal(day) {
+        const d = (this.dash.trafficDaily || {})[day] || {};
+        let t = 0;
+        for (const v of Object.values(d)) t += (v.upload || 0) + (v.download || 0);
+        return t;
+      },
+      get trafficMaxDay() {
+        let max = 1;
+        for (const day of this.trafficDays) { const t = this.trafficDayTotal(day); if (t > max) max = t; }
+        return max;
+      },
+      trafficBarWidth(day, ob) {
+        const d = (this.dash.trafficDaily || {})[day] || {};
+        const v = d[ob]; if (!v) return 0;
+        const total = (v.upload || 0) + (v.download || 0);
+        return Math.max((total / this.trafficMaxDay) * 100, 0.5);
+      },
+      trafficColor(idx) {
+        const colors = ['#6366f1','#10b981','#f59e0b','#3b82f6','#ec4899','#8b5cf6','#14b8a6','#f97316'];
+        return colors[idx % colors.length];
+      },
+
+      // ---- User traffic detail ----
+      async showUserTraffic(u) {
+        try {
+          const r = await this.api('GET', `/api/traffic/user/${u.id}?days=30`);
+          if (r.ok) {
+            let maxD = 1;
+            for (const v of Object.values(r.data.daily || {})) {
+              const t = (v.upload || 0) + (v.download || 0);
+              if (t > maxD) maxD = t;
+            }
+            this.trafficModal = { show: true, data: r.data, maxDaily: maxD };
+          }
+        } catch(e) { this.toast(e.message || '获取失败', 'error'); }
+      },
     };
   }
   </script>

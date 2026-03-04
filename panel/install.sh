@@ -49,15 +49,30 @@ install_deps() {
 # ---------- 部署面板文件 ----------
 deploy_files() {
     info "部署面板文件..."
-    mkdir -p "${PANEL_DIR}/templates" "${DATA_DIR}"
+    mkdir -p "${PANEL_DIR}/templates" "${PANEL_DIR}/static" "${DATA_DIR}"
 
-    # 复制文件
     SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
     cp "${SCRIPT_DIR}/app.py" "${PANEL_DIR}/app.py"
     cp "${SCRIPT_DIR}/requirements.txt" "${PANEL_DIR}/requirements.txt"
     cp -r "${SCRIPT_DIR}/templates/"* "${PANEL_DIR}/templates/"
 
+    if [ -f "${SCRIPT_DIR}/download-static.sh" ]; then
+        cp "${SCRIPT_DIR}/download-static.sh" "${PANEL_DIR}/download-static.sh"
+        chmod +x "${PANEL_DIR}/download-static.sh"
+    fi
+
     info "面板文件已部署到 ${PANEL_DIR}"
+}
+
+download_static() {
+    local DL_SCRIPT="${PANEL_DIR}/download-static.sh"
+    if [ -f "$DL_SCRIPT" ]; then
+        info "下载前端静态资源（Tailwind / Alpine / QRCode / 字体）..."
+        bash "$DL_SCRIPT" && info "静态资源下载完成" || warn "部分静态资源下载失败，可稍后手动执行: $DL_SCRIPT"
+    else
+        warn "download-static.sh 不存在，跳过静态资源下载"
+        warn "面板 UI 可能无法在国内正常加载，请稍后手动执行下载脚本"
+    fi
 }
 
 # ---------- 创建虚拟环境 ----------
@@ -176,6 +191,8 @@ setup_systemd() {
 Description=sing-box Management Panel
 After=network.target sing-box.service
 Wants=sing-box.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -187,8 +204,6 @@ Environment=PATH=${VENV_DIR}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/b
 # ---- 自动重启策略 ----
 Restart=always
 RestartSec=3s
-StartLimitIntervalSec=60
-StartLimitBurst=5
 
 # ---- OOM 保护 ----
 OOMScoreAdjust=-200
@@ -241,6 +256,7 @@ main() {
     deploy_files
     setup_venv
     generate_env
+    download_static
     setup_systemd
     setup_firewall
 

@@ -25,7 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator
 from sqlalchemy import (
     create_engine, Column, Integer, String, Boolean,
-    DateTime, BigInteger, Text, event
+    DateTime, BigInteger, Text, Date, event, func, UniqueConstraint
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from passlib.context import CryptContext
@@ -126,6 +126,22 @@ class User(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
+
+
+class TrafficLog(Base):
+    """每日流量日志：按 (日期, 用户, 出口) 三维度聚合"""
+    __tablename__ = "traffic_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    log_date = Column(Date, nullable=False, index=True)
+    user_id = Column(Integer, nullable=True, index=True)
+    outbound = Column(String(64), nullable=False)
+    upload = Column(BigInteger, default=0)
+    download = Column(BigInteger, default=0)
+
+    __table_args__ = (
+        UniqueConstraint("log_date", "user_id", "outbound", name="uq_date_user_outbound"),
+    )
 
 
 class SystemLog(Base):
@@ -320,15 +336,62 @@ _conn_tracker: dict = {}
 _outbound_traffic: dict = {}
 
 
+def _load_outbound_traffic_from_db():
+    """启动时从数据库加载当天已有的出口流量数据到内存缓存。"""
+    global _outbound_traffic
+    db = SessionLocal()
+    try:
+        today = datetime.now(timezone.utc).date()
+        rows = (
+            db.query(TrafficLog.outbound, func.sum(TrafficLog.upload), func.sum(TrafficLog.download))
+            .filter(TrafficLog.log_date == today)
+            .group_by(TrafficLog.outbound)
+            .all()
+        )
+        for outbound, up, down in rows:
+            _outbound_traffic[outbound] = {"upload": up or 0, "download": down or 0}
+    except Exception as e:
+        _traffic_logger.warning("Failed to load outbound traffic from DB: %s", e)
+    finally:
+        db.close()
+
+
 def get_outbound_traffic() -> dict:
-    """返回各出口节点的累计流量（当前会话）。"""
+    """返回各出口节点的累计流量（当天，持久化 + 内存增量）。"""
     return dict(_outbound_traffic)
 
 
+def _upsert_traffic_log(db: Session, log_date, user_db_id: int | None, outbound: str,
+                         up_delta: int, down_delta: int):
+    """向 traffic_logs 表 upsert 一条记录。"""
+    row = (
+        db.query(TrafficLog)
+        .filter(
+            TrafficLog.log_date == log_date,
+            TrafficLog.user_id == user_db_id,
+            TrafficLog.outbound == outbound,
+        )
+        .first()
+    )
+    if row:
+        row.upload = (row.upload or 0) + up_delta
+        row.download = (row.download or 0) + down_delta
+    else:
+        db.add(TrafficLog(
+            log_date=log_date,
+            user_id=user_db_id,
+            outbound=outbound,
+            upload=up_delta,
+            download=down_delta,
+        ))
+
+
 async def _collect_traffic():
-    """定期轮询 Clash API /connections，按用户和出口节点归集流量。"""
+    """定期轮询 Clash API /connections，按用户和出口节点归集流量并持久化。"""
     global _conn_tracker
     await asyncio.sleep(10)
+
+    _load_outbound_traffic_from_db()
 
     while True:
         try:
@@ -348,7 +411,8 @@ async def _collect_traffic():
                 connections = data.get("connections") or []
 
             current_conns: dict = {}
-            user_deltas: dict[str, int] = {}
+            # key: (user_credential, outbound), value: {up, down}
+            detail_deltas: dict[tuple[str, str], dict[str, int]] = {}
 
             for conn in connections:
                 conn_id = conn.get("id", "")
@@ -379,35 +443,57 @@ async def _collect_traffic():
                     up_delta = upload
                     down_delta = download
 
-                total_delta = up_delta + down_delta
-
-                if total_delta > 0 and user_id:
-                    user_deltas[user_id] = user_deltas.get(user_id, 0) + total_delta
+                up_delta = max(up_delta, 0)
+                down_delta = max(down_delta, 0)
 
                 if (up_delta > 0 or down_delta > 0) and outbound:
                     if outbound not in _outbound_traffic:
                         _outbound_traffic[outbound] = {"upload": 0, "download": 0}
-                    _outbound_traffic[outbound]["upload"] += max(up_delta, 0)
-                    _outbound_traffic[outbound]["download"] += max(down_delta, 0)
+                    _outbound_traffic[outbound]["upload"] += up_delta
+                    _outbound_traffic[outbound]["download"] += down_delta
+
+                if (up_delta > 0 or down_delta > 0) and (user_id or outbound):
+                    key = (user_id or "", outbound or "unknown")
+                    if key not in detail_deltas:
+                        detail_deltas[key] = {"up": 0, "down": 0}
+                    detail_deltas[key]["up"] += up_delta
+                    detail_deltas[key]["down"] += down_delta
 
             _conn_tracker = current_conns
 
-            if user_deltas:
+            if detail_deltas:
                 db = SessionLocal()
                 try:
-                    for uid, delta in user_deltas.items():
+                    today = datetime.now(timezone.utc).date()
+                    user_totals: dict[str, int] = {}
+
+                    for (uid, outbound), delta in detail_deltas.items():
+                        user_db_id = None
+                        if uid:
+                            user = (
+                                db.query(User)
+                                .filter((User.uuid == uid) | (User.hy2_password == uid))
+                                .first()
+                            )
+                            if user:
+                                user_db_id = user.id
+                                user_totals[uid] = user_totals.get(uid, 0) + delta["up"] + delta["down"]
+
+                        _upsert_traffic_log(db, today, user_db_id, outbound,
+                                            delta["up"], delta["down"])
+
+                    for uid, total in user_totals.items():
                         user = (
                             db.query(User)
-                            .filter(
-                                (User.uuid == uid) | (User.hy2_password == uid)
-                            )
+                            .filter((User.uuid == uid) | (User.hy2_password == uid))
                             .first()
                         )
                         if user:
-                            user.traffic_used = (user.traffic_used or 0) + delta
+                            user.traffic_used = (user.traffic_used or 0) + total
+
                     db.commit()
                 except Exception as e:
-                    _traffic_logger.warning("Failed to update traffic: %s", e)
+                    _traffic_logger.warning("Failed to persist traffic: %s", e)
                     db.rollback()
                 finally:
                     db.close()
@@ -421,13 +507,15 @@ async def _collect_traffic():
 
 
 async def check_tunnel_health() -> List[dict]:
-    """通过 Clash API 检查各出口隧道状态"""
+    """通过 Clash API 检查各出口隧道状态（自动发现所有出口节点）"""
     headers = {}
     if settings.SINGBOX_API_SECRET:
         headers["Authorization"] = f"Bearer {settings.SINGBOX_API_SECRET}"
 
     tunnels = []
-    tunnel_tags = ["wg-jp", "wg-sg", "wg-uk", "wg-us", "auto-best", "direct"]
+    _SKIP_TYPES = {"dns", "block", "selector"}
+    _SKIP_TAGS = {"dns-out"}
+    _INBOUND_SUFFIXES = ("-in",)
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -436,34 +524,43 @@ async def check_tunnel_health() -> List[dict]:
                 return tunnels
 
             proxies = resp.json().get("proxies", {})
+
+            tunnel_tags = [
+                tag for tag, p in proxies.items()
+                if p.get("type", "") not in _SKIP_TYPES
+                and tag not in _SKIP_TAGS
+                and not any(tag.endswith(s) for s in _INBOUND_SUFFIXES)
+            ]
+            tunnel_tags.sort(key=lambda t: (
+                0 if t.startswith("wg-") else 1 if t == "auto-best" else 2 if t == "direct" else 3
+            ))
+
             for tag in tunnel_tags:
-                if tag in proxies:
-                    proxy = proxies[tag]
-                    info = {
-                        "tag": tag,
-                        "type": proxy.get("type", "unknown"),
-                        "alive": proxy.get("alive", False),
-                        "delay": proxy.get("history", [{}])[-1].get("delay", 0)
-                        if proxy.get("history") else 0,
-                    }
+                proxy = proxies[tag]
+                info = {
+                    "tag": tag,
+                    "type": proxy.get("type", "unknown"),
+                    "alive": proxy.get("alive", False),
+                    "delay": proxy.get("history", [{}])[-1].get("delay", 0)
+                    if proxy.get("history") else 0,
+                }
 
-                    # 主动测延迟
-                    try:
-                        delay_resp = await client.get(
-                            f"{settings.SINGBOX_API}/proxies/{tag}/delay",
-                            params={"url": "https://www.gstatic.com/generate_204", "timeout": 5000},
-                            headers=headers,
-                            timeout=10
-                        )
-                        if delay_resp.status_code == 200:
-                            info["delay"] = delay_resp.json().get("delay", 0)
-                            info["alive"] = True
-                        else:
-                            info["alive"] = False
-                    except Exception:
-                        pass
+                try:
+                    delay_resp = await client.get(
+                        f"{settings.SINGBOX_API}/proxies/{tag}/delay",
+                        params={"url": "https://www.gstatic.com/generate_204", "timeout": 5000},
+                        headers=headers,
+                        timeout=10
+                    )
+                    if delay_resp.status_code == 200:
+                        info["delay"] = delay_resp.json().get("delay", 0)
+                        info["alive"] = True
+                    else:
+                        info["alive"] = False
+                except Exception:
+                    pass
 
-                    tunnels.append(info)
+                tunnels.append(info)
 
     except Exception:
         pass
@@ -637,25 +734,91 @@ def generate_clash_config(user: User) -> str:
             },
         ],
         "rules": [
+            # 本地 & 局域网
             "DOMAIN-SUFFIX,local,DIRECT",
+            "DOMAIN-SUFFIX,localhost,DIRECT",
             "IP-CIDR,127.0.0.0/8,DIRECT,no-resolve",
             "IP-CIDR,10.0.0.0/8,DIRECT,no-resolve",
             "IP-CIDR,172.16.0.0/12,DIRECT,no-resolve",
             "IP-CIDR,192.168.0.0/16,DIRECT,no-resolve",
+            "IP-CIDR,100.64.0.0/10,DIRECT,no-resolve",
+            # 广告拦截
             "GEOSITE,category-ads-all,REJECT",
+            # AI 服务
             "DOMAIN-SUFFIX,openai.com,AI",
+            "DOMAIN-SUFFIX,chatgpt.com,AI",
+            "DOMAIN-SUFFIX,ai.com,AI",
+            "DOMAIN-SUFFIX,oaiusercontent.com,AI",
+            "DOMAIN-SUFFIX,oaistatic.com,AI",
             "DOMAIN-SUFFIX,anthropic.com,AI",
             "DOMAIN-SUFFIX,claude.ai,AI",
+            "DOMAIN-SUFFIX,gemini.google.com,AI",
+            "DOMAIN-SUFFIX,bard.google.com,AI",
+            "DOMAIN-SUFFIX,aistudio.google.com,AI",
+            "DOMAIN-SUFFIX,makersuite.google.com,AI",
+            "DOMAIN-SUFFIX,ai.google.dev,AI",
+            "DOMAIN-SUFFIX,deepmind.google,AI",
+            "DOMAIN-SUFFIX,notebooklm.google.com,AI",
+            "DOMAIN-SUFFIX,notebooklm.google,AI",
+            "DOMAIN-SUFFIX,generativelanguage.googleapis.com,AI",
+            "DOMAIN-SUFFIX,deepmind.com,AI",
+            "DOMAIN-SUFFIX,x.ai,AI",
+            "DOMAIN-SUFFIX,grok.com,AI",
+            "DOMAIN-SUFFIX,copilot.microsoft.com,AI",
+            "DOMAIN-SUFFIX,mistral.ai,AI",
+            "DOMAIN-SUFFIX,perplexity.ai,AI",
+            "DOMAIN-SUFFIX,meta.ai,AI",
+            "DOMAIN-SUFFIX,midjourney.com,AI",
+            "DOMAIN-SUFFIX,pika.art,AI",
+            "DOMAIN-SUFFIX,runway.com,AI",
+            "DOMAIN-SUFFIX,runwayml.com,AI",
+            "DOMAIN-SUFFIX,luma.ai,AI",
+            "DOMAIN-SUFFIX,stability.ai,AI",
+            "DOMAIN-SUFFIX,character.ai,AI",
+            "DOMAIN-SUFFIX,poe.com,AI",
+            "DOMAIN-SUFFIX,suno.ai,AI",
+            "DOMAIN-SUFFIX,suno.com,AI",
+            "DOMAIN-SUFFIX,elevenlabs.io,AI",
+            "DOMAIN-SUFFIX,cursor.sh,AI",
+            "DOMAIN-SUFFIX,cursor.com,AI",
+            "DOMAIN-SUFFIX,v0.dev,AI",
+            "DOMAIN-SUFFIX,bolt.new,AI",
+            "DOMAIN-SUFFIX,huggingface.co,AI",
+            "DOMAIN-SUFFIX,replicate.com,AI",
+            "DOMAIN-SUFFIX,together.ai,AI",
+            "DOMAIN-SUFFIX,groq.com,AI",
+            "DOMAIN-SUFFIX,fireworks.ai,AI",
+            "DOMAIN-SUFFIX,anyscale.com,AI",
+            "DOMAIN-SUFFIX,cohere.com,AI",
+            "DOMAIN-SUFFIX,cohere.ai,AI",
+            "DOMAIN-SUFFIX,dify.ai,AI",
+            "DOMAIN-SUFFIX,flowith.io,AI",
+            # 流媒体
             "GEOSITE,netflix,Streaming",
             "GEOSITE,disney,Streaming",
-            "GEOSITE,youtube,Streaming",
+            "GEOSITE,hbo,Streaming",
+            "GEOSITE,bbc,Streaming",
+            "GEOSITE,spotify,Streaming",
+            "GEOSITE,primevideo,Streaming",
+            # 国外常用
+            "GEOSITE,youtube,proxy",
             "GEOSITE,google,proxy",
             "GEOSITE,github,proxy",
             "GEOSITE,twitter,proxy",
             "GEOSITE,facebook,proxy",
+            "GEOSITE,instagram,proxy",
             "GEOSITE,telegram,proxy",
+            "GEOSITE,whatsapp,proxy",
+            "GEOSITE,wikipedia,proxy",
+            "GEOSITE,reddit,proxy",
+            "GEOSITE,steam,proxy",
+            "GEOSITE,apple-cn,DIRECT",
+            "GEOSITE,microsoft@cn,DIRECT",
+            # 国内直连
             "GEOSITE,cn,DIRECT",
             "GEOIP,cn,DIRECT,no-resolve",
+            "GEOIP,private,DIRECT,no-resolve",
+            # 兜底
             "MATCH,Final",
         ],
     }
@@ -825,6 +988,20 @@ async def lifespan(app: FastAPI):
     print(f"🚀 sing-box 管理面板启动: http://{settings.PANEL_HOST}:{settings.PANEL_PORT}")
     print(f"📦 数据库: {settings.DB_PATH}")
     print(f"⚙️  sing-box 配置: {settings.SINGBOX_CONFIG}")
+
+    db = SessionLocal()
+    try:
+        active = get_active_users(db)
+        if active:
+            result = sync_users_to_singbox(db)
+            if result.get("ok"):
+                print(f"✅ 启动同步: {result.get('active_users', 0)} 个用户已写入 config.json")
+            else:
+                print(f"⚠️  启动同步失败: {result.get('message', '未知错误')}")
+    except Exception as e:
+        print(f"⚠️  启动同步异常: {e}")
+    finally:
+        db.close()
 
     collector = asyncio.create_task(_collect_traffic())
 
@@ -1010,23 +1187,33 @@ async def get_metrics(request: Request):
         pass
     metrics_lines.append("")
 
-    # 隧道延迟（从 sing-box API）
-    tunnel_tags = ["wg-jp", "wg-sg", "wg-uk", "wg-us", "auto-best", "direct"]
-    for tag in tunnel_tags:
-        try:
-            async with httpx.AsyncClient(timeout=3) as client:
-                resp = await client.get(
-                    f"{settings.SINGBOX_API}/proxies/{tag}/delay",
-                    params={"url": "https://www.gstatic.com/generate_204", "timeout": 5000},
-                    headers={"Authorization": f"Bearer {settings.SINGBOX_API_SECRET}"} if settings.SINGBOX_API_SECRET else {}
-                )
-                if resp.status_code == 200:
-                    delay = resp.json().get("delay", 0)
-                    metrics_lines.append(f"# HELP singbox_tunnel_delay_ms {tag} 隧道延迟")
-                    metrics_lines.append(f"# TYPE singbox_tunnel_delay_ms gauge")
-                    metrics_lines.append(f"singbox_tunnel_delay_ms{{outbound=\"{tag}\"}} {delay}")
-        except Exception:
-            pass
+    # 隧道延迟（从 sing-box API，自动发现所有出口）
+    api_headers = {"Authorization": f"Bearer {settings.SINGBOX_API_SECRET}"} if settings.SINGBOX_API_SECRET else {}
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            proxies_resp = await client.get(f"{settings.SINGBOX_API}/proxies", headers=api_headers)
+            if proxies_resp.status_code == 200:
+                proxies_data = proxies_resp.json().get("proxies", {})
+                _skip = {"dns", "block", "selector", "dns-out"}
+                tags = [t for t, p in proxies_data.items()
+                        if p.get("type", "") not in _skip and t not in _skip
+                        and not t.endswith("-in")]
+                for tag in tags:
+                    try:
+                        resp = await client.get(
+                            f"{settings.SINGBOX_API}/proxies/{tag}/delay",
+                            params={"url": "https://www.gstatic.com/generate_204", "timeout": 5000},
+                            headers=api_headers
+                        )
+                        if resp.status_code == 200:
+                            delay = resp.json().get("delay", 0)
+                            metrics_lines.append(f"# HELP singbox_tunnel_delay_ms {tag} 隧道延迟")
+                            metrics_lines.append(f"# TYPE singbox_tunnel_delay_ms gauge")
+                            metrics_lines.append(f'singbox_tunnel_delay_ms{{outbound="{tag}"}} {delay}')
+                    except Exception:
+                        pass
+    except Exception:
+        pass
 
     return PlainTextResponse("\n".join(metrics_lines), media_type="text/plain; charset=utf-8")
 
@@ -1214,6 +1401,118 @@ async def reset_traffic(
     sync_result = sync_users_to_singbox(db)
 
     return {"ok": True, "sync": sync_result}
+
+
+# ---- 流量历史 ----
+
+@app.get("/api/traffic/daily")
+async def traffic_daily(
+    admin: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+    days: int = Query(30, le=365, description="查询天数"),
+):
+    """按天汇总全局出口流量（最近 N 天）"""
+    since = datetime.now(timezone.utc).date() - timedelta(days=days)
+    rows = (
+        db.query(TrafficLog.log_date, TrafficLog.outbound,
+                 func.sum(TrafficLog.upload), func.sum(TrafficLog.download))
+        .filter(TrafficLog.log_date >= since)
+        .group_by(TrafficLog.log_date, TrafficLog.outbound)
+        .order_by(TrafficLog.log_date)
+        .all()
+    )
+    result: dict = {}
+    for log_date, outbound, up, down in rows:
+        day_str = log_date.isoformat()
+        if day_str not in result:
+            result[day_str] = {}
+        result[day_str][outbound] = {"upload": up or 0, "download": down or 0}
+
+    return {"ok": True, "data": result}
+
+
+@app.get("/api/traffic/users")
+async def traffic_users(
+    admin: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+    days: int = Query(30, le=365),
+):
+    """按用户汇总流量（最近 N 天）"""
+    since = datetime.now(timezone.utc).date() - timedelta(days=days)
+    rows = (
+        db.query(TrafficLog.user_id,
+                 func.sum(TrafficLog.upload), func.sum(TrafficLog.download))
+        .filter(TrafficLog.log_date >= since, TrafficLog.user_id.isnot(None))
+        .group_by(TrafficLog.user_id)
+        .all()
+    )
+    user_ids = [r[0] for r in rows if r[0]]
+    users_map = {}
+    if user_ids:
+        users = db.query(User).filter(User.id.in_(user_ids)).all()
+        users_map = {u.id: u.username for u in users}
+
+    result = []
+    for uid, up, down in rows:
+        if not uid:
+            continue
+        result.append({
+            "user_id": uid,
+            "username": users_map.get(uid, f"已删除({uid})"),
+            "upload": up or 0,
+            "download": down or 0,
+            "total": (up or 0) + (down or 0),
+        })
+    result.sort(key=lambda x: x["total"], reverse=True)
+
+    return {"ok": True, "data": result}
+
+
+@app.get("/api/traffic/user/{user_id}")
+async def traffic_user_detail(
+    user_id: int,
+    admin: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+    days: int = Query(30, le=365),
+):
+    """单用户流量明细：按天+出口"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    since = datetime.now(timezone.utc).date() - timedelta(days=days)
+    rows = (
+        db.query(TrafficLog.log_date, TrafficLog.outbound,
+                 TrafficLog.upload, TrafficLog.download)
+        .filter(TrafficLog.user_id == user_id, TrafficLog.log_date >= since)
+        .order_by(TrafficLog.log_date)
+        .all()
+    )
+    daily: dict = {}
+    by_outbound: dict = {}
+    for log_date, outbound, up, down in rows:
+        day_str = log_date.isoformat()
+        up = up or 0
+        down = down or 0
+        if day_str not in daily:
+            daily[day_str] = {"upload": 0, "download": 0}
+        daily[day_str]["upload"] += up
+        daily[day_str]["download"] += down
+        if outbound not in by_outbound:
+            by_outbound[outbound] = {"upload": 0, "download": 0}
+        by_outbound[outbound]["upload"] += up
+        by_outbound[outbound]["download"] += down
+
+    return {
+        "ok": True,
+        "data": {
+            "username": user.username,
+            "traffic_used": user.traffic_used,
+            "traffic_limit": user.traffic_limit,
+            "daily": daily,
+            "by_outbound": by_outbound,
+        }
+    }
 
 
 # ---- 订阅链接（公开接口，无需认证）----
