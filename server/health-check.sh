@@ -12,6 +12,7 @@ set -euo pipefail
 
 # sing-box API 地址
 CLASH_API="http://127.0.0.1:9090"
+CONFIG="${CONFIG:-/etc/sing-box/config.json}"
 
 # 检测目标
 CHECK_URL="https://httpbin.org/ip"
@@ -25,7 +26,9 @@ ALERT_TYPE=""  # dingtalk / telegram / custom
 declare -A EXPECTED_COUNTRY=(
     ["wg-jp"]="Japan"
     ["wg-sg"]="Singapore"
+    ["wg-sg02"]="Singapore"
     ["wg-uk"]="United Kingdom"
+    ["wg-us"]="United States"
     ["auto-best"]="auto"  # Surfshark 智能连接
 )
 
@@ -41,11 +44,31 @@ log_info()  { echo "[${TIMESTAMP}] [INFO]  $*"; }
 log_warn()  { echo "[${TIMESTAMP}] [WARN]  $*"; }
 log_error() { echo "[${TIMESTAMP}] [ERROR] $*"; }
 
+list_wireguard_outbounds() {
+    if [ -f "$CONFIG" ] && command -v jq &>/dev/null; then
+        jq -r '.outbounds[] | select(.type == "wireguard") | .tag' "$CONFIG" 2>/dev/null
+    else
+        printf '%s\n' "wg-jp" "wg-sg" "wg-sg02" "wg-uk" "wg-us"
+    fi
+}
+
 # jq 备用（当 jq 不可用时）
 if ! command -v jq &>/dev/null; then
     jq() {
-        python3 -c "import sys, json; d=json.load(open(sys.argv[1])) if len(sys.argv)>1 else json.load(sys.stdin); print(json.dumps(d.get('${2:-}', {})))" 2>/dev/null || \
-        grep -o "\"${2:-}[^}]*\" | head -1 | sed 's/[{}]//g' || echo ""
+        python3 - "$@" <<'PY' 2>/dev/null || echo ""
+import json
+import sys
+
+try:
+    if len(sys.argv) > 1 and sys.argv[-1] not in ("-", "") and not sys.argv[-1].startswith("."):
+        with open(sys.argv[-1], "r", encoding="utf-8") as f:
+            data = json.load(f)
+    else:
+        data = json.load(sys.stdin)
+    print(json.dumps(data))
+except Exception:
+    sys.exit(1)
+PY
     }
 fi
 
@@ -209,7 +232,9 @@ check_connections() {
 cmd_speed() {
     log_info "========== 出口测速开始 =========="
 
-    local outbounds=("wg-jp" "wg-sg" "wg-uk" "auto-best" "direct")
+    local outbounds=()
+    mapfile -t outbounds < <(list_wireguard_outbounds)
+    outbounds+=("auto-best" "direct")
 
     for tag in "${outbounds[@]}"; do
         local api_resp delay
@@ -237,7 +262,10 @@ cmd_monitor() {
     check_process || true
     check_service || true
 
-    for outbound in "wg-jp" "wg-sg" "wg-uk" "auto-best"; do
+    local outbounds=()
+    mapfile -t outbounds < <(list_wireguard_outbounds)
+    outbounds+=("auto-best")
+    for outbound in "${outbounds[@]}"; do
         check_tunnel "$outbound" || true
     done
 
@@ -291,7 +319,10 @@ generate_report() {
     echo ""
 
     # 各隧道
-    for outbound in "wg-jp" "wg-sg" "wg-uk" "auto-best"; do
+    local outbounds=()
+    mapfile -t outbounds < <(list_wireguard_outbounds)
+    outbounds+=("auto-best")
+    for outbound in "${outbounds[@]}"; do
         check_tunnel "$outbound" || ((failed_checks++))
         ((total_checks++))
         echo ""
@@ -325,7 +356,10 @@ main() {
             check_process && check_service
             ;;
         tunnel)
-            for outbound in "wg-jp" "wg-sg" "wg-uk" "auto-best"; do
+            local outbounds=()
+            mapfile -t outbounds < <(list_wireguard_outbounds)
+            outbounds+=("auto-best")
+            for outbound in "${outbounds[@]}"; do
                 check_tunnel "$outbound"
             done
             ;;

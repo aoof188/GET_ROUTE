@@ -32,6 +32,11 @@
         "detour": "wg-sg"
       },
       {
+        "tag": "dns-sg02",
+        "address": "https://1.1.1.1/dns-query",
+        "detour": "wg-sg02"
+      },
+      {
         "tag": "dns-uk",
         "address": "https://1.1.1.1/dns-query",
         "detour": "wg-uk"
@@ -136,12 +141,18 @@
         "server": "dns-sg"
       },
       {
+        "rule_set": [
+          "geosite-netflix",
+          "geosite-tiktok"
+        ],
+        "server": "dns-sg02"
+      },
+      {
         "rule_set": "geosite-bbc",
         "server": "dns-uk"
       },
       {
         "rule_set": [
-          "geosite-netflix",
           "geosite-google",
           "geosite-youtube",
           "geosite-github"
@@ -321,6 +332,18 @@
     },
     {
       "type": "wireguard",
+      "tag": "wg-sg02",
+      "server": "sg-sng.prod.surfshark.com",
+      "server_port": 51820,
+      "local_address": [
+        "10.14.0.2/32"
+      ],
+      "private_key": "IMbx/Icfz9a4rxNMRb08Zm3BxNpVf+Bj4/2zHOsMLGc=",
+      "peer_public_key": "MGfgkhJsMVMTO33h1wr76+z6gQr/93VcGdClfbaPsnU=",
+      "mtu": 1280
+    },
+    {
+      "type": "wireguard",
       "tag": "wg-uk",
       "server": "uk-lon.prod.surfshark.com",
       "server_port": 51820,
@@ -444,6 +467,10 @@
         "outbound": "wg-sg"
       },
       {
+        "rule_set": "geosite-tiktok",
+        "outbound": "wg-sg02"
+      },
+      {
         "rule_set": "geosite-bbc",
         "outbound": "wg-uk"
       },
@@ -502,6 +529,14 @@
         "tag": "geosite-hbo",
         "format": "binary",
         "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-hbo.srs",
+        "download_detour": "direct",
+        "update_interval": "7d"
+      },
+      {
+        "type": "remote",
+        "tag": "geosite-tiktok",
+        "format": "binary",
+        "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-tiktok.srs",
         "download_detour": "direct",
         "update_interval": "7d"
       },

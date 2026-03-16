@@ -309,6 +309,7 @@ rules:
   - GEOSITE,netflix,Streaming
   - GEOSITE,disney,Streaming
   - GEOSITE,hbo,Streaming
+  - GEOSITE,tiktok,Streaming
   - GEOSITE,bbc,Streaming
   - GEOSITE,spotify,Streaming
   - GEOSITE,primevideo,Streaming

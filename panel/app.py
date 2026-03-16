@@ -836,6 +836,7 @@ def generate_clash_config(user: User) -> str:
             "GEOSITE,netflix,Streaming",
             "GEOSITE,disney,Streaming",
             "GEOSITE,hbo,Streaming",
+            "GEOSITE,tiktok,Streaming",
             "GEOSITE,bbc,Streaming",
             "GEOSITE,spotify,Streaming",
             "GEOSITE,primevideo,Streaming",

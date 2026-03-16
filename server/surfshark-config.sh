@@ -61,6 +61,22 @@ get_wg_field() {
     ' "$CONFIG" 2>/dev/null
 }
 
+list_wg_tags() {
+    jq -r '.outbounds[] | select(.type == "wireguard" and (.tag | startswith("wg-"))) | .tag' "$CONFIG" 2>/dev/null
+}
+
+display_name_for_tag() {
+    local tag="$1"
+    case "$tag" in
+        wg-jp) echo "🇯🇵 日本 (JP)" ;;
+        wg-sg) echo "🇸🇬 新加坡 (SG)" ;;
+        wg-sg02) echo "🇸🇬 新加坡 02 (SG02)" ;;
+        wg-uk) echo "🇬🇧 英国 (UK)" ;;
+        wg-us) echo "🇺🇸 美国 (US)" ;;
+        *) echo "$tag" ;;
+    esac
+}
+
 # ---------- 修改 WireGuard 配置 ----------
 # 用 jq 精确修改，不是 sed 替换
 set_wg_field() {
@@ -97,12 +113,12 @@ cmd_show() {
     echo -e "${BOLD}=== Surfshark WireGuard 出口配置 ===${NC}"
     echo ""
 
-    local tags=("wg-jp" "wg-sg" "wg-uk")
-    local names=("🇯🇵 日本 (JP)" "🇸🇬 新加坡 (SG)" "🇬🇧 英国 (UK)")
+    local tags=()
+    mapfile -t tags < <(list_wg_tags)
 
-    for i in "${!tags[@]}"; do
-        local tag="${tags[$i]}"
-        local name="${names[$i]}"
+    for tag in "${tags[@]}"; do
+        local name
+        name=$(display_name_for_tag "$tag")
         local config_out
         config_out=$(get_wg_config "$tag")
 
@@ -246,7 +262,9 @@ cmd_setup_all() {
     echo ""
     info "逐个配置所有 Surfshark 出口..."
 
-    for tag in "wg-jp" "wg-sg" "wg-uk"; do
+    local tags=()
+    mapfile -t tags < <(list_wg_tags)
+    for tag in "${tags[@]}"; do
         cmd_set "$tag"
         echo ""
     done
@@ -331,7 +349,9 @@ cmd_test() {
     fi
 
     # 通过 Clash API 触发延迟测试
-    for tag in "wg-jp" "wg-sg" "wg-uk"; do
+    local tags=()
+    mapfile -t tags < <(list_wg_tags)
+    for tag in "${tags[@]}"; do
         local server
         server=$(get_wg_field "$tag" "server")
         [[ "$server" == *"<"* ]] && { echo -e "  ${tag}: ${DIM}未配置${NC}"; continue; }
@@ -460,7 +480,8 @@ main() {
         set)
             if [ -z "$arg" ]; then
                 echo "用法: $0 set <tag>"
-                echo "可用: wg-jp, wg-sg, wg-uk"
+                echo "可用:"
+                list_wg_tags | sed 's/^/  /'
                 exit 1
             fi
             cmd_set "$arg"
@@ -489,7 +510,7 @@ main() {
             echo "命令:"
             echo "  show              查看所有出口配置 (默认)"
             echo "  set <tag>         修改指定出口 (如: set wg-jp)"
-            echo "  setup-all         逐个配置所有出口 (JP/SG/UK)"
+            echo "  setup-all         逐个配置所有已定义出口"
             echo "  test              测试所有隧道延迟"
             echo "  add               添加新的出口国家"
             echo "  rollback          回滚到历史备份"

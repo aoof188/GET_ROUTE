@@ -34,7 +34,8 @@ SERVICES=(
 
 # WireGuard 隧道检查（通过 Clash API）
 CLASH_API="http://127.0.0.1:9090"
-TUNNELS=("wg-jp" "wg-sg" "wg-uk")
+CONFIG="${CONFIG:-/etc/sing-box/config.json}"
+TUNNELS=("wg-jp" "wg-sg" "wg-sg02" "wg-uk" "wg-us")
 
 # 证书检查
 CERT_WARN_DAYS=14
@@ -61,6 +62,12 @@ log_warn()  { log "WARN " "$@"; }
 log_error() { log "ERROR" "$@"; }
 log_ok()    { log " OK  " "$@"; }
 
+load_tunnels_from_config() {
+    if [ -f "$CONFIG" ] && command -v jq &>/dev/null; then
+        mapfile -t TUNNELS < <(jq -r '.outbounds[] | select(.type == "wireguard") | .tag' "$CONFIG" 2>/dev/null)
+    fi
+}
+
 # 日志轮转（保持文件不会无限增长）
 rotate_log() {
     if [ -f "$LOG_FILE" ]; then
@@ -72,6 +79,8 @@ rotate_log() {
         fi
     fi
 }
+
+load_tunnels_from_config
 
 # ---------- 告警 ----------
 
