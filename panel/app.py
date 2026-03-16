@@ -361,7 +361,7 @@ def get_outbound_traffic() -> dict:
     return dict(_outbound_traffic)
 
 
-def _upsert_traffic_log(db: Session, log_date, user_db_id: int | None, outbound: str,
+def _upsert_traffic_log(db: Session, log_date, user_db_id: Optional[int], outbound: str,
                          up_delta: int, down_delta: int):
     """向 traffic_logs 表 upsert 一条记录。"""
     row = (

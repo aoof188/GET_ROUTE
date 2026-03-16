@@ -4,7 +4,6 @@
     "timestamp": true,
     "output": "/var/log/sing-box/sing-box.log"
   },
-
   "experimental": {
     "cache_file": {
       "enabled": true,
@@ -15,7 +14,6 @@
       "secret": ""
     }
   },
-
   "dns": {
     "servers": [
       {
@@ -74,34 +72,64 @@
       },
       {
         "domain_suffix": [
-          "openai.com", "chatgpt.com", "ai.com", "oaiusercontent.com", "oaistatic.com",
-          "anthropic.com", "claude.ai",
-          "x.ai", "grok.com",
-          "perplexity.ai", "midjourney.com", "character.ai",
-          "poe.com", "suno.ai", "suno.com", "meta.ai",
-          "huggingface.co", "stability.ai", "deepmind.com",
-          "runway.com", "runwayml.com", "cohere.com", "cohere.ai",
-          "replicate.com", "elevenlabs.io",
-          "cursor.sh", "cursor.com", "v0.dev", "bolt.new",
-          "together.ai", "groq.com", "fireworks.ai",
-          "mistral.ai", "anyscale.com",
-          "dify.ai", "flowith.io", "pika.art", "luma.ai",
+          "openai.com",
+          "chatgpt.com",
+          "ai.com",
+          "oaiusercontent.com",
+          "oaistatic.com",
+          "anthropic.com",
+          "claude.ai",
+          "x.ai",
+          "grok.com",
+          "perplexity.ai",
+          "midjourney.com",
+          "character.ai",
+          "poe.com",
+          "suno.ai",
+          "suno.com",
+          "meta.ai",
+          "huggingface.co",
+          "stability.ai",
+          "deepmind.com",
+          "runway.com",
+          "runwayml.com",
+          "cohere.com",
+          "cohere.ai",
+          "replicate.com",
+          "elevenlabs.io",
+          "cursor.sh",
+          "cursor.com",
+          "v0.dev",
+          "bolt.new",
+          "together.ai",
+          "groq.com",
+          "fireworks.ai",
+          "mistral.ai",
+          "anyscale.com",
+          "dify.ai",
+          "flowith.io",
+          "pika.art",
+          "luma.ai",
           "copilot.microsoft.com"
         ],
         "server": "dns-auto"
       },
       {
         "domain_suffix": [
-          "gemini.google.com", "bard.google.com", "aistudio.google.com",
-          "makersuite.google.com", "ai.google.dev", "deepmind.google",
-          "notebooklm.google.com", "notebooklm.google",
+          "gemini.google.com",
+          "bard.google.com",
+          "aistudio.google.com",
+          "makersuite.google.com",
+          "ai.google.dev",
+          "deepmind.google",
+          "notebooklm.google.com",
+          "notebooklm.google",
           "generativelanguage.googleapis.com"
         ],
         "server": "dns-us"
       },
       {
         "rule_set": [
-          "geosite-netflix",
           "geosite-disney",
           "geosite-hbo"
         ],
@@ -113,6 +141,7 @@
       },
       {
         "rule_set": [
+          "geosite-netflix",
           "geosite-google",
           "geosite-youtube",
           "geosite-github"
@@ -124,7 +153,6 @@
     "strategy": "prefer_ipv4",
     "independent_cache": true
   },
-
   "inbounds": [
     {
       "type": "vless",
@@ -135,7 +163,25 @@
       "sniff_override_destination": false,
       "users": [
         {
-          "uuid": "2d17979e-f29b-458d-88d6-0bbd9b33c744"
+          "uuid": "e5f039ae-8f13-4c32-b434-d0b1c030634c"
+        },
+        {
+          "uuid": "787a52e5-02fd-47b3-9cbc-a7ce1fa18180"
+        },
+        {
+          "uuid": "c379f6ec-fb28-4536-80af-abf37cc95883"
+        },
+        {
+          "uuid": "775f9153-5046-4d85-8395-778b6530175c"
+        },
+        {
+          "uuid": "959d02ae-27b4-487c-91ed-dcad150e4f91"
+        },
+        {
+          "uuid": "ce46c572-a01c-444c-bdbb-97cbf7e5c758"
+        },
+        {
+          "uuid": "d450e64b-b766-4f7a-84eb-c90794e099dc"
         }
       ],
       "transport": {
@@ -152,7 +198,31 @@
       "sniff_override_destination": false,
       "users": [
         {
-          "uuid": "2d17979e-f29b-458d-88d6-0bbd9b33c744",
+          "uuid": "e5f039ae-8f13-4c32-b434-d0b1c030634c",
+          "flow": "xtls-rprx-vision"
+        },
+        {
+          "uuid": "787a52e5-02fd-47b3-9cbc-a7ce1fa18180",
+          "flow": "xtls-rprx-vision"
+        },
+        {
+          "uuid": "c379f6ec-fb28-4536-80af-abf37cc95883",
+          "flow": "xtls-rprx-vision"
+        },
+        {
+          "uuid": "775f9153-5046-4d85-8395-778b6530175c",
+          "flow": "xtls-rprx-vision"
+        },
+        {
+          "uuid": "959d02ae-27b4-487c-91ed-dcad150e4f91",
+          "flow": "xtls-rprx-vision"
+        },
+        {
+          "uuid": "ce46c572-a01c-444c-bdbb-97cbf7e5c758",
+          "flow": "xtls-rprx-vision"
+        },
+        {
+          "uuid": "d450e64b-b766-4f7a-84eb-c90794e099dc",
           "flow": "xtls-rprx-vision"
         }
       ],
@@ -181,18 +251,37 @@
       "sniff_override_destination": false,
       "users": [
         {
-          "password": "2112f9a3b21896ad30269e3ee0aad315"
+          "password": "fca15876472c917634963c569318855a"
+        },
+        {
+          "password": "0ebddd3b214e3e2ffb3016bbcda91d87"
+        },
+        {
+          "password": "d6330877272b290f7eca5866abaef5bb"
+        },
+        {
+          "password": "efad7875f1f8cc72441c58ed2375d692"
+        },
+        {
+          "password": "fecdf2e8ff33bb2669c64e7238d5714d"
+        },
+        {
+          "password": "aa3fa165f17b9c9e11c3fb4919c0e292"
+        },
+        {
+          "password": "237e54883e4476ef716760d153f32fa5"
         }
       ],
       "tls": {
         "enabled": true,
-        "alpn": ["h3"],
+        "alpn": [
+          "h3"
+        ],
         "certificate_path": "/etc/sing-box/cert/fullchain.pem",
         "key_path": "/etc/sing-box/cert/privkey.pem"
       }
     }
   ],
-
   "outbounds": [
     {
       "type": "direct",
@@ -206,11 +295,10 @@
       "type": "dns",
       "tag": "dns-out"
     },
-
     {
       "type": "wireguard",
       "tag": "wg-jp",
-      "server": "jp-tok.prod.surfshark.com",
+      "server": "146.70.205.181",
       "server_port": 51820,
       "local_address": [
         "10.14.0.2/32"
@@ -222,7 +310,7 @@
     {
       "type": "wireguard",
       "tag": "wg-sg",
-      "server": "sg-sng.prod.surfshark.com",
+      "server": "149.88.106.177",
       "server_port": 51820,
       "local_address": [
         "10.14.0.2/32"
@@ -255,17 +343,20 @@
       "peer_public_key": "m+L7BVQWDwU2TxjfspMRLkRctvmo7fOkd+eVk6KC5lM=",
       "mtu": 1280
     },
-
     {
       "type": "urltest",
       "tag": "auto-best",
-      "outbounds": ["wg-jp", "wg-sg", "wg-uk", "wg-us"],
+      "outbounds": [
+        "wg-jp",
+        "wg-sg",
+        "wg-uk",
+        "wg-us"
+      ],
       "url": "https://www.gstatic.com/generate_204",
       "interval": "5m",
       "tolerance": 100
     }
   ],
-
   "route": {
     "rules": [
       {
@@ -290,36 +381,63 @@
       },
       {
         "domain_suffix": [
-          "openai.com", "chatgpt.com", "ai.com", "oaiusercontent.com", "oaistatic.com",
-          "anthropic.com", "claude.ai",
-          "x.ai", "grok.com",
-          "perplexity.ai", "midjourney.com", "character.ai",
-          "poe.com", "suno.ai", "suno.com", "meta.ai",
-          "huggingface.co", "stability.ai", "deepmind.com",
-          "runway.com", "runwayml.com", "cohere.com", "cohere.ai",
-          "replicate.com", "elevenlabs.io",
-          "cursor.sh", "cursor.com", "v0.dev", "bolt.new",
-          "together.ai", "groq.com", "fireworks.ai",
-          "mistral.ai", "anyscale.com",
-          "dify.ai", "flowith.io", "pika.art", "luma.ai",
+          "openai.com",
+          "chatgpt.com",
+          "ai.com",
+          "oaiusercontent.com",
+          "oaistatic.com",
+          "anthropic.com",
+          "claude.ai",
+          "x.ai",
+          "grok.com",
+          "perplexity.ai",
+          "midjourney.com",
+          "character.ai",
+          "poe.com",
+          "suno.ai",
+          "suno.com",
+          "meta.ai",
+          "huggingface.co",
+          "stability.ai",
+          "deepmind.com",
+          "runway.com",
+          "runwayml.com",
+          "cohere.com",
+          "cohere.ai",
+          "replicate.com",
+          "elevenlabs.io",
+          "cursor.sh",
+          "cursor.com",
+          "v0.dev",
+          "bolt.new",
+          "together.ai",
+          "groq.com",
+          "fireworks.ai",
+          "mistral.ai",
+          "anyscale.com",
+          "dify.ai",
+          "flowith.io",
+          "pika.art",
+          "luma.ai",
+          "gemini.google.com",
+          "bard.google.com",
+          "aistudio.google.com",
+          "makersuite.google.com",
+          "ai.google.dev",
+          "deepmind.google",
+          "notebooklm.google.com",
+          "notebooklm.google",
+          "generativelanguage.googleapis.com",
           "copilot.microsoft.com"
         ],
         "outbound": "auto-best"
       },
-
       {
-        "domain_suffix": [
-          "gemini.google.com", "bard.google.com", "aistudio.google.com",
-          "makersuite.google.com", "ai.google.dev", "deepmind.google",
-          "notebooklm.google.com", "notebooklm.google",
-          "generativelanguage.googleapis.com"
-        ],
-        "outbound": "wg-us"
+        "rule_set": "geosite-netflix",
+        "outbound": "wg-sg02"
       },
-
       {
         "rule_set": [
-          "geosite-netflix",
           "geosite-disney",
           "geosite-hbo"
         ],
@@ -329,7 +447,6 @@
         "rule_set": "geosite-bbc",
         "outbound": "wg-uk"
       },
-
       {
         "rule_set": [
           "geosite-google",
