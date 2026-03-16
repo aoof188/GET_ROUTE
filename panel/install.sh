@@ -119,7 +119,8 @@ generate_env() {
     echo ""
     read -p "ECS-A 公网 IP: " -r INPUT_ECS_A_IP
     read -p "ECS-B 公网 IP（没有留空）: " -r INPUT_ECS_B_IP
-    read -p "代理域名（如 proxy.example.com）: " -r INPUT_PROXY_DOMAIN
+    read -p "ECS-A 代理域名（如 a.example.com）: " -r INPUT_PROXY_DOMAIN_A
+    read -p "ECS-B 代理域名（如 b.example.com，没有可留空）: " -r INPUT_PROXY_DOMAIN_B
     read -p "面板域名（如 panel.example.com）: " -r INPUT_PANEL_DOMAIN
 
     if [ -z "$AUTO_REALITY_PUB" ]; then
@@ -129,7 +130,8 @@ generate_env() {
         read -p "Reality Short ID: " -r AUTO_REALITY_SID
     fi
 
-    local INPUT_HY2_SNI="${INPUT_PROXY_DOMAIN}"
+    local INPUT_PROXY_DOMAIN="${INPUT_PROXY_DOMAIN_A}"
+    local INPUT_HY2_SNI="${INPUT_PROXY_DOMAIN_A}"
     local INPUT_SUB_BASE_URL=""
     [ -n "$INPUT_PANEL_DOMAIN" ] && INPUT_SUB_BASE_URL="https://${INPUT_PANEL_DOMAIN}"
 
@@ -138,11 +140,12 @@ generate_env() {
 # 生成时间: $(date '+%Y-%m-%d %H:%M:%S')
 
 # ---- 面板 ----
-PANEL_HOST=0.0.0.0
+PANEL_HOST=127.0.0.1
 PANEL_PORT=8080
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=${ADMIN_PASS}
 JWT_SECRET=${JWT_SECRET}
+TRUSTED_PROXY_IPS=127.0.0.1,::1
 
 # ---- sing-box ----
 SINGBOX_CONFIG=/etc/sing-box/config.json
@@ -165,6 +168,8 @@ REALITY_SNI=www.microsoft.com
 REALITY_PORT=40443
 HY2_SNI=${INPUT_HY2_SNI}
 PROXY_DOMAIN=${INPUT_PROXY_DOMAIN}
+PROXY_DOMAIN_A=${INPUT_PROXY_DOMAIN_A}
+PROXY_DOMAIN_B=${INPUT_PROXY_DOMAIN_B}
 PANEL_DOMAIN=${INPUT_PANEL_DOMAIN}
 
 # ---- 订阅 ----
@@ -227,8 +232,15 @@ EOF
 
 # ---------- 防火墙 ----------
 setup_firewall() {
+    local HOST
     local PORT
+    HOST=$(grep "^PANEL_HOST=" "${PANEL_DIR}/.env" 2>/dev/null | cut -d= -f2 || echo "127.0.0.1")
     PORT=$(grep "^PANEL_PORT=" "${PANEL_DIR}/.env" 2>/dev/null | cut -d= -f2 || echo "8080")
+
+    if [ "$HOST" = "127.0.0.1" ] || [ "$HOST" = "::1" ] || [ "$HOST" = "localhost" ]; then
+        info "PANEL_HOST=${HOST}，跳过放行 ${PORT}/tcp（仅本机反代访问）"
+        return 0
+    fi
 
     if command -v ufw &>/dev/null; then
         ufw allow "${PORT}/tcp" comment "sing-box panel"
@@ -272,7 +284,8 @@ main() {
     info "   systemctl enable --now sing-box-panel"
     echo ""
     info "3. 访问面板:"
-    info "   http://<ECS_IP>:8080"
+    info "   https://<面板域名>"
+    info "   （面板默认仅监听 127.0.0.1:8080，由 Nginx 反代）"
     echo ""
     info "4. 查看状态:"
     info "   systemctl status sing-box-panel"

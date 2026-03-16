@@ -409,8 +409,10 @@
               <h3 class="text-sm font-semibold mb-4 text-zinc-300">域名配置</h3>
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><label class="block text-[11px] font-medium text-zinc-500 mb-1.5 uppercase tracking-wider">面板域名</label><input x-model="settingsForm.panel_domain" type="text" class="w-full bg-zinc-800/80 border border-white/[.06] rounded-lg px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 transition-all" placeholder="panel.example.com"></div>
-                <div><label class="block text-[11px] font-medium text-zinc-500 mb-1.5 uppercase tracking-wider">代理域名</label><input x-model="settingsForm.proxy_domain" type="text" class="w-full bg-zinc-800/80 border border-white/[.06] rounded-lg px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 transition-all" placeholder="proxy.example.com"></div>
+                <div><label class="block text-[11px] font-medium text-zinc-500 mb-1.5 uppercase tracking-wider">ECS-A 代理域名</label><input x-model="settingsForm.proxy_domain_a" type="text" class="w-full bg-zinc-800/80 border border-white/[.06] rounded-lg px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 transition-all" placeholder="a.example.com"></div>
+                <div><label class="block text-[11px] font-medium text-zinc-500 mb-1.5 uppercase tracking-wider">ECS-B 代理域名</label><input x-model="settingsForm.proxy_domain_b" type="text" class="w-full bg-zinc-800/80 border border-white/[.06] rounded-lg px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 transition-all" placeholder="b.example.com"></div>
               </div>
+              <p class="text-[11px] text-zinc-600 mt-3">保留旧的单域名配置时，ECS-A 会继续沿用 `proxy_domain` 兼容值。</p>
             </div>
             <div class="bg-zinc-900/60 border border-white/[.06] rounded-2xl p-6">
               <h3 class="text-sm font-semibold mb-4 text-zinc-300">节点信息</h3>
@@ -636,7 +638,18 @@
       },
       async fetchUsers() { try { const qs = this.userSearch ? `?search=${encodeURIComponent(this.userSearch)}` : ''; const r = await this.api('GET', `/api/users${qs}`); if (r.ok) this.users = r.data; } catch(e) { console.error('fetchUsers:', e); this.toast('用户列表加载失败', 'error'); } },
       async fetchNodes() { try { const r = await this.api('GET', '/api/nodes'); if (r.ok) this.nodes = r.data; } catch(e) { console.error('fetchNodes:', e); } },
-      async fetchSettings() { try { const r = await this.api('GET', '/api/settings'); if (r.ok) this.settingsForm = r.data; } catch(e) { console.error('fetchSettings:', e); this.toast('设置加载失败', 'error'); } },
+      async fetchSettings() {
+        try {
+          const r = await this.api('GET', '/api/settings');
+          if (r.ok) {
+            this.settingsForm = {
+              ...r.data,
+              proxy_domain_a: r.data.proxy_domain_a || r.data.proxy_domain || '',
+              proxy_domain_b: r.data.proxy_domain_b || '',
+            };
+          }
+        } catch(e) { console.error('fetchSettings:', e); this.toast('设置加载失败', 'error'); }
+      },
       async fetchLogs() { try { const r = await this.api('GET', '/api/system/logs'); if (r.ok) this.logs = r.data; } catch(e) { console.error('fetchLogs:', e); } },
       async fetchCerts() { try { const r = await this.api('GET', '/api/certs'); if (r.ok) this.certs = r.data; } catch(e) { console.error('fetchCerts:', e); } },
       openCreateUser() { this.userModal = { show: true, editing: false, editId: null, saving: false, form: { username: '', note: '', traffic_limit_gb: 0, expire_days: 0 } }; },
@@ -676,7 +689,16 @@
       async healthCheck() { this.nodesLoading = true; try { const r = await this.api('POST', '/api/nodes/health-check'); if (r.ok) this.nodes = r.data; this.toast('测速完成', 'success'); } catch(e) { this.toast(e.message, 'error'); } this.nodesLoading = false; },
       async systemReload() { try { const r = await this.api('POST', '/api/system/reload'); this.toast(r.ok ? '已同步 & Reload' : (r.message||'失败'), r.ok ? 'success' : 'error'); } catch(e) { this.toast(e.message, 'error'); } },
       async systemRestart() { if (!confirm('确定重启？会短暂中断所有连接')) return; try { const r = await this.api('POST', '/api/system/restart'); this.toast(r.ok ? '已重启' : (r.message||'失败'), r.ok ? 'success' : 'error'); } catch(e) { this.toast(e.message, 'error'); } },
-      async saveSettings() { try { const r = await this.api('PUT', '/api/settings', this.settingsForm); if (r.ok) this.toast('已保存', 'success'); } catch(e) { this.toast(e.message, 'error'); } },
+      async saveSettings() {
+        try {
+          const body = {
+            ...this.settingsForm,
+            proxy_domain: this.settingsForm.proxy_domain_a || '',
+          };
+          const r = await this.api('PUT', '/api/settings', body);
+          if (r.ok) this.toast('已保存', 'success');
+        } catch(e) { this.toast(e.message, 'error'); }
+      },
       async issueCert(domain) { if (!domain) { this.toast('请输入域名', 'error'); return; } if (!confirm(`签发 ${domain}？`)) return; this.certLoading = true; this.certOutput = ''; this.certOutputShow = true; try { const r = await this.api('POST', '/api/certs/issue', { domain }); this.certOutput = r.output || r.error || ''; this.toast(r.ok ? '签发成功' : '签发失败', r.ok ? 'success' : 'error'); if(r.ok) await this.fetchCerts(); } catch(e) { this.toast(e.message, 'error'); } this.certLoading = false; },
       async renewCert(domain) { if (!confirm(`续期 ${domain}？`)) return; this.certLoading = true; this.certOutput = ''; this.certOutputShow = true; try { const r = await this.api('POST', '/api/certs/renew', { domain }); this.certOutput = r.output || r.error || ''; this.toast(r.ok ? '续期成功' : '续期失败', r.ok ? 'success' : 'error'); if(r.ok) await this.fetchCerts(); } catch(e) { this.toast(e.message, 'error'); } this.certLoading = false; },
 

@@ -13,6 +13,7 @@ import asyncio
 import logging
 from uuid import uuid4
 from datetime import datetime, timedelta, timezone
+from ipaddress import ip_address
 from pathlib import Path
 from typing import Optional, List
 from contextlib import asynccontextmanager
@@ -77,7 +78,13 @@ class Settings:
 
         # ---- 域名与证书 ----
         self.PANEL_DOMAIN = os.getenv("PANEL_DOMAIN", "")
-        self.PROXY_DOMAIN = os.getenv("PROXY_DOMAIN", "")
+        legacy_proxy_domain = os.getenv("PROXY_DOMAIN", "")
+        self.PROXY_DOMAIN = legacy_proxy_domain
+        self.PROXY_DOMAIN_A = os.getenv("PROXY_DOMAIN_A", legacy_proxy_domain)
+        self.PROXY_DOMAIN_B = os.getenv(
+            "PROXY_DOMAIN_B",
+            self.PROXY_DOMAIN_A or legacy_proxy_domain
+        )
         self.CERT_BASE_DIR = os.getenv("CERT_BASE_DIR", "/etc/nginx/ssl")
         self.CERT_MANAGER_PATH = os.getenv("CERT_MANAGER_PATH", "/opt/sing-box/cert-manager.sh")
 
@@ -89,7 +96,15 @@ class Settings:
             self.CORS_ALLOW_ORIGINS = ["http://localhost:8080"]
 
         # ---- JWT Secret (只从 .env 读取) ----
-        self.JWT_SECRET = os.getenv("JWT_SECRET", secrets.token_hex(32))
+        self.JWT_SECRET = os.getenv("JWT_SECRET", "").strip()
+        if not self.JWT_SECRET:
+            raise RuntimeError("JWT_SECRET 未配置，请在 panel/.env 中设置固定值")
+
+        # ---- 受信任代理 ----
+        trusted_proxies = os.getenv("TRUSTED_PROXY_IPS", "127.0.0.1,::1")
+        self.TRUSTED_PROXY_IPS = tuple(
+            ip.strip() for ip in trusted_proxies.split(",") if ip.strip()
+        )
 
     def _load_env_file(self):
         env_file = Path(__file__).parent / ".env"
@@ -198,6 +213,25 @@ def verify_token(authorization: Optional[str] = Header(None)) -> str:
         raise HTTPException(status_code=401, detail="Token 已过期或无效")
 
 
+def get_client_ip(request: Request) -> str:
+    """仅在请求来自受信任反代时才使用 X-Forwarded-For。"""
+    peer_ip = request.client.host if request.client else ""
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if peer_ip in settings.TRUSTED_PROXY_IPS and forwarded_for:
+        client_ip = forwarded_for.split(",")[0].strip()
+        if client_ip:
+            return client_ip
+    return peer_ip or "unknown"
+
+
+def is_private_or_loopback_ip(value: str) -> bool:
+    try:
+        addr = ip_address(value)
+    except ValueError:
+        return False
+    return addr.is_private or addr.is_loopback
+
+
 # ================================================================
 #  sing-box Management
 # ================================================================
@@ -275,6 +309,7 @@ def sync_users_to_singbox(db: Session) -> dict:
             capture_output=True, text=True, timeout=10
         )
         if result.returncode != 0:
+            shutil.copy2(backup_path, config_path)
             return {"ok": False, "message": f"reload 失败: {result.stderr}"}
 
         # 记录日志
@@ -579,29 +614,33 @@ def generate_clash_config(user: User) -> str:
     proxy_names = []
 
     # ---- VLESS WS+TLS (主力，走域名 + Nginx 反代) ----
-    for ecs_ip, ecs_name in [(settings.ECS_A_IP, settings.ECS_A_NAME),
-                              (settings.ECS_B_IP, settings.ECS_B_NAME)]:
-        if not ecs_ip or not settings.PROXY_DOMAIN:
+    ws_nodes = [
+        (settings.ECS_A_IP, settings.ECS_A_NAME, settings.PROXY_DOMAIN_A),
+        (settings.ECS_B_IP, settings.ECS_B_NAME, settings.PROXY_DOMAIN_B),
+    ]
+    ws_domains_seen = set()
+    for ecs_ip, ecs_name, proxy_domain in ws_nodes:
+        if not ecs_ip or not proxy_domain or proxy_domain in ws_domains_seen:
             continue
         name = f"{ecs_name}-WS"
         proxies.append({
             "name": name,
             "type": "vless",
-            "server": settings.PROXY_DOMAIN if ecs_name == settings.ECS_A_NAME
-                      else settings.PROXY_DOMAIN,  # 可以为 B 配不同域名
+            "server": proxy_domain,
             "port": settings.VLESS_PORT,
             "uuid": user.uuid,
             "network": "ws",
             "tls": True,
             "udp": True,
-            "servername": settings.PROXY_DOMAIN,
+            "servername": proxy_domain,
             "ws-opts": {
                 "path": "/ws",
-                "headers": {"Host": settings.PROXY_DOMAIN},
+                "headers": {"Host": proxy_domain},
             },
             "client-fingerprint": "chrome",
         })
         proxy_names.append(name)
+        ws_domains_seen.add(proxy_domain)
 
     # ---- VLESS Reality (备用，直连 IP，无需域名) ----
     for ecs_ip, ecs_name in [(settings.ECS_A_IP, settings.ECS_A_NAME),
@@ -832,14 +871,22 @@ def generate_base64_links(user: User) -> str:
     links = []
 
     # VLESS WS+TLS 链接（主力）
-    if settings.PROXY_DOMAIN:
+    ws_links = [
+        (settings.ECS_A_NAME, settings.PROXY_DOMAIN_A),
+        (settings.ECS_B_NAME, settings.PROXY_DOMAIN_B),
+    ]
+    ws_domains_seen = set()
+    for ecs_name, proxy_domain in ws_links:
+        if not proxy_domain or proxy_domain in ws_domains_seen:
+            continue
         params = (
             f"encryption=none&security=tls"
-            f"&sni={settings.PROXY_DOMAIN}&fp=chrome"
-            f"&type=ws&path=%2Fws&host={settings.PROXY_DOMAIN}"
+            f"&sni={proxy_domain}&fp=chrome"
+            f"&type=ws&path=%2Fws&host={proxy_domain}"
         )
-        link = f"vless://{user.uuid}@{settings.PROXY_DOMAIN}:{settings.VLESS_PORT}?{params}#WS-TLS"
+        link = f"vless://{user.uuid}@{proxy_domain}:{settings.VLESS_PORT}?{params}#{ecs_name}-WS"
         links.append(link)
+        ws_domains_seen.add(proxy_domain)
 
     # VLESS Reality 链接（备用）
     for ip, name in [(settings.ECS_A_IP, settings.ECS_A_NAME),
@@ -895,6 +942,8 @@ class SettingsUpdate(BaseModel):
     sub_base_url: Optional[str] = None
     panel_domain: Optional[str] = None
     proxy_domain: Optional[str] = None
+    proxy_domain_a: Optional[str] = None
+    proxy_domain_b: Optional[str] = None
 
 
 class CertIssueRequest(BaseModel):
@@ -1046,9 +1095,7 @@ async def index(request: Request):
 @app.post("/api/login")
 async def login(req: LoginRequest, request: Request):
     # 获取客户端 IP（考虑代理）
-    client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-    if not client_ip:
-        client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
 
     # Rate Limiting 检查
     allowed, remaining, wait_seconds = check_login_rate_limit(client_ip)
@@ -1090,25 +1137,15 @@ async def dashboard(admin: str = Depends(verify_token), db: Session = Depends(ge
 
 # ---- 系统状态（仅限本机 / 内网访问）----
 
-# Metrics 允许的 IP 前缀（本机 + 内网）
-_METRICS_ALLOWED_PREFIXES = ("127.0.0.1", "::1", "10.", "172.16.", "172.17.",
-                              "172.18.", "172.19.", "172.20.", "172.21.",
-                              "172.22.", "172.23.", "172.24.", "172.25.",
-                              "172.26.", "172.27.", "172.28.", "172.29.",
-                              "172.30.", "172.31.", "192.168.")
-
-
 @app.get("/api/metrics")
 async def get_metrics(request: Request):
     """
     获取 Prometheus 格式的监控指标
     仅允许本机和内网 IP 访问
     """
-    client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-    if not client_ip:
-        client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
 
-    if not client_ip.startswith(_METRICS_ALLOWED_PREFIXES):
+    if not is_private_or_loopback_ip(client_ip):
         raise HTTPException(status_code=403, detail="Forbidden: metrics 仅允许内网访问")
 
     import subprocess
@@ -1289,11 +1326,13 @@ async def create_user(
         note=req.note,
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    db.flush()
 
     # 同步到 sing-box
     sync_result = sync_users_to_singbox(db)
+    if not sync_result.get("ok"):
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"同步 sing-box 失败: {sync_result.get('message', '未知错误')}")
 
     # 记录日志
     log = SystemLog(action="create_user", detail=f"创建用户: {user.username}")
@@ -1335,9 +1374,12 @@ async def update_user(
             user.expire_at = datetime.now(timezone.utc) + timedelta(days=req.expire_days)
 
     user.updated_at = datetime.now(timezone.utc)
-    db.commit()
+    db.flush()
 
     sync_result = sync_users_to_singbox(db)
+    if not sync_result.get("ok"):
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"同步 sing-box 失败: {sync_result.get('message', '未知错误')}")
 
     return {"ok": True, "sync": sync_result}
 
@@ -1354,9 +1396,12 @@ async def delete_user(
 
     username = user.username
     db.delete(user)
-    db.commit()
+    db.flush()
 
     sync_result = sync_users_to_singbox(db)
+    if not sync_result.get("ok"):
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"同步 sing-box 失败: {sync_result.get('message', '未知错误')}")
 
     log = SystemLog(action="delete_user", detail=f"删除用户: {username}")
     db.add(log)
@@ -1377,9 +1422,12 @@ async def toggle_user(
 
     user.enabled = not user.enabled
     user.updated_at = datetime.now(timezone.utc)
-    db.commit()
+    db.flush()
 
     sync_result = sync_users_to_singbox(db)
+    if not sync_result.get("ok"):
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"同步 sing-box 失败: {sync_result.get('message', '未知错误')}")
 
     return {"ok": True, "enabled": user.enabled, "sync": sync_result}
 
@@ -1396,9 +1444,12 @@ async def reset_traffic(
 
     user.traffic_used = 0
     user.updated_at = datetime.now(timezone.utc)
-    db.commit()
+    db.flush()
 
     sync_result = sync_users_to_singbox(db)
+    if not sync_result.get("ok"):
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"同步 sing-box 失败: {sync_result.get('message', '未知错误')}")
 
     return {"ok": True, "sync": sync_result}
 
@@ -1591,7 +1642,7 @@ async def run_health_check(admin: str = Depends(verify_token)):
 @app.post("/api/system/reload")
 async def system_reload(admin: str = Depends(verify_token), db: Session = Depends(get_db)):
     sync_result = sync_users_to_singbox(db)
-    return {"ok": True, "sync": sync_result}
+    return {"ok": sync_result.get("ok", False), "sync": sync_result, "message": sync_result.get("message", "")}
 
 
 @app.post("/api/system/restart")
@@ -1649,6 +1700,8 @@ async def get_settings(admin: str = Depends(verify_token)):
             "hy2_port": settings.HY2_PORT,
             "panel_domain": settings.PANEL_DOMAIN,
             "proxy_domain": settings.PROXY_DOMAIN,
+            "proxy_domain_a": settings.PROXY_DOMAIN_A,
+            "proxy_domain_b": settings.PROXY_DOMAIN_B,
         }
     }
 
@@ -1678,6 +1731,8 @@ async def update_settings(req: SettingsUpdate, admin: str = Depends(verify_token
         "sub_base_url": "SUB_BASE_URL",
         "panel_domain": "PANEL_DOMAIN",
         "proxy_domain": "PROXY_DOMAIN",
+        "proxy_domain_a": "PROXY_DOMAIN_A",
+        "proxy_domain_b": "PROXY_DOMAIN_B",
     }
 
     for field, env_key in mapping.items():
@@ -1685,6 +1740,20 @@ async def update_settings(req: SettingsUpdate, admin: str = Depends(verify_token
         if value is not None:
             env_vars[env_key] = str(value)
             setattr(settings, env_key, value)
+
+    if req.proxy_domain is not None and req.proxy_domain_a is None:
+        settings.PROXY_DOMAIN_A = settings.PROXY_DOMAIN
+        env_vars["PROXY_DOMAIN_A"] = settings.PROXY_DOMAIN_A
+
+    if req.proxy_domain_a is not None:
+        settings.PROXY_DOMAIN = settings.PROXY_DOMAIN_A
+        env_vars["PROXY_DOMAIN"] = settings.PROXY_DOMAIN
+    elif "PROXY_DOMAIN_A" not in env_vars and "PROXY_DOMAIN" in env_vars:
+        env_vars["PROXY_DOMAIN_A"] = env_vars["PROXY_DOMAIN"]
+
+    if req.proxy_domain_b is not None and not settings.PROXY_DOMAIN_B:
+        settings.PROXY_DOMAIN_B = settings.PROXY_DOMAIN_A
+        env_vars["PROXY_DOMAIN_B"] = settings.PROXY_DOMAIN_B
 
     # 写回 .env
     lines = [f"# sing-box Panel 配置 (auto-generated)"]
